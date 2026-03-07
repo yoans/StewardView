@@ -1,0 +1,25 @@
+{
+  "name": "hrcoc-finance",
+  "version": "1.0.0",
+  "description": "HRCOC Church Finance Transparency & Management System",
+  "private": true,
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "server": "cd server && npm run dev",
+    "client": "cd client && npm start",
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "install:all": "npm install && cd server && npm install && cd ../client && npm install",
+    "build": "cd client && npm install && npm run build",
+    "start": "cd server && node src/index.js",
+    "postinstall": "cd server && npm install && cd ../client && npm install && npm run build",
+    "db:migrate": "cd server && npx knex migrate:latest",
+    "db:seed": "cd server && npx knex seed:run",
+    "db:reset": "cd server && npx knex migrate:rollback --all && npx knex migrate:latest && npx knex seed:run",
+    "report:monthly": "cd server && node src/reports/generateMonthlyReport.js"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
