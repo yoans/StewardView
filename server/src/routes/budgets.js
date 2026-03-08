@@ -116,6 +116,61 @@ router.post('/', authenticate, authorize('admin', 'treasurer'), async (req, res)
   }
 });
 
+// PUT /api/budgets/:id — edit a specific budget line
+router.put('/:id', authenticate, authorize('admin', 'treasurer'), async (req, res) => {
+  try {
+    const existing = await db('budgets').where({ id: req.params.id }).first();
+    if (!existing) return res.status(404).json({ error: 'Budget entry not found' });
+
+    const updates = {};
+    ['budgeted_amount', 'notes', 'category_id', 'year', 'month'].forEach(f => {
+      if (req.body[f] !== undefined) updates[f] = req.body[f];
+    });
+    updates.updated_at = new Date().toISOString();
+
+    await db('budgets').where({ id: req.params.id }).update(updates);
+
+    await logAudit({
+      entityType: 'budget', entityId: existing.id, action: 'update',
+      oldValues: { budgeted_amount: existing.budgeted_amount, notes: existing.notes },
+      newValues: updates,
+      changeReason: req.body.change_reason,
+      userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+    });
+
+    const updated = await db('budgets')
+      .leftJoin('categories', 'budgets.category_id', 'categories.id')
+      .where('budgets.id', req.params.id)
+      .select('budgets.*', 'categories.name as category_name', 'categories.type as category_type')
+      .first();
+    res.json(updated);
+  } catch (err) {
+    console.error('Update budget error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// DELETE /api/budgets/:id — delete a budget line
+router.delete('/:id', authenticate, authorize('admin', 'treasurer'), async (req, res) => {
+  try {
+    const existing = await db('budgets').where({ id: req.params.id }).first();
+    if (!existing) return res.status(404).json({ error: 'Budget entry not found' });
+
+    await db('budgets').where({ id: req.params.id }).del();
+
+    await logAudit({
+      entityType: 'budget', entityId: existing.id, action: 'delete',
+      oldValues: existing,
+      userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+    });
+
+    res.json({ message: 'Budget entry deleted', id: existing.id });
+  } catch (err) {
+    console.error('Delete budget error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // POST /api/budgets/copy — copy budget from one month/year to another
 router.post('/copy', authenticate, authorize('admin', 'treasurer'), async (req, res) => {
   try {

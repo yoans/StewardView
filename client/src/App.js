@@ -9,6 +9,8 @@ import BudgetPage from './pages/BudgetPage';
 import BankPage from './pages/BankPage';
 import ReportsPage from './pages/ReportsPage';
 import AuditPage from './pages/AuditPage';
+import GivelifyPage from './pages/GivelifyPage';
+import AdminPage from './pages/AdminPage';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -55,6 +57,8 @@ function App() {
                 <Route path="/bank" element={<BankPage user={user} />} />
                 <Route path="/reports" element={<ReportsPage user={user} />} />
                 <Route path="/audit" element={<AuditPage />} />
+                <Route path="/givelify" element={<GivelifyPage user={user} />} />
+                <Route path="/admin" element={<AdminPage user={user} />} />
               </Routes>
             </Layout>
           ) : <Navigate to="/login" />

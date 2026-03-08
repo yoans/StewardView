@@ -14,13 +14,19 @@ exports.seed = async function (knex) {
   await knex('bank_accounts').del();
   await knex('users').del();
 
-  // ── Users ─────────────────────────────────────────────
+  // Clear new tables (may not exist on first run)
+  try { await knex('givelify_contributions').del(); } catch { /* ok */ }
+  try { await knex('data_backups').del(); } catch { /* ok */ }
+  try { await knex('app_settings').del(); } catch { /* ok */ }
+
+  // ── Users (2 admins required at minimum) ──────────────
   const passwordHash = await bcrypt.hash('changeme123', 10);
 
   await knex('users').insert([
-    { id: 1, email: 'treasurer@hrcoc.org', password_hash: passwordHash, name: 'Church Treasurer', role: 'treasurer' },
-    { id: 2, email: 'elder@hrcoc.org', password_hash: passwordHash, name: 'Elder Member', role: 'elder' },
-    { id: 3, email: 'viewer@hrcoc.org', password_hash: passwordHash, name: 'Church Member', role: 'viewer' },
+    { id: 1, email: 'admin@hrcoc.org', password_hash: passwordHash, name: 'Admin User', role: 'admin' },
+    { id: 2, email: 'treasurer@hrcoc.org', password_hash: passwordHash, name: 'Church Treasurer', role: 'admin' },
+    { id: 3, email: 'elder@hrcoc.org', password_hash: passwordHash, name: 'Elder Member', role: 'elder' },
+    { id: 4, email: 'viewer@hrcoc.org', password_hash: passwordHash, name: 'Church Member', role: 'viewer' },
   ]);
 
   // ── Bank Accounts ─────────────────────────────────────

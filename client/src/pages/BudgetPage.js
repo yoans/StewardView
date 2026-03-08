@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { budgetsAPI } from '../services/api';
+import { budgetsAPI, categoriesAPI } from '../services/api';
 
 const fmt = (n) => parseFloat(n || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
@@ -10,8 +10,14 @@ export default function BudgetPage({ user }) {
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [comparison, setComparison] = useState(null);
   const [ytd, setYtd] = useState(null);
-  const [view, setView] = useState('monthly'); // 'monthly' | 'ytd'
+  const [allBudgets, setAllBudgets] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [view, setView] = useState('monthly'); // 'monthly' | 'ytd' | 'edit'
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  const canEdit = ['admin', 'treasurer'].includes(user?.role);
 
   const loadMonthly = async () => {
     setLoading(true);
@@ -31,26 +37,72 @@ export default function BudgetPage({ user }) {
     setLoading(false);
   };
 
+  const loadEditData = async () => {
+    setLoading(true);
+    try {
+      const [budgetRes, catRes] = await Promise.all([
+        budgetsAPI.list(year),
+        categoriesAPI.list(),
+      ]);
+      setAllBudgets(budgetRes.data);
+      setCategories(catRes.data);
+    } catch (err) { console.error(err); }
+    setLoading(false);
+  };
+
   useEffect(() => {
     if (view === 'monthly') loadMonthly();
-    else loadYTD();
+    else if (view === 'ytd') loadYTD();
+    else if (view === 'edit') loadEditData();
   }, [year, month, view]);
+
+  const handleBudgetUpdate = async (budgetId, newAmount) => {
+    setError(''); setSuccess('');
+    try {
+      await budgetsAPI.update(budgetId, { budgeted_amount: parseFloat(newAmount) });
+      setSuccess('Budget updated');
+      loadEditData();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to update budget');
+    }
+  };
+
+  const handleBudgetDelete = async (budgetId) => {
+    if (!window.confirm('Delete this budget line?')) return;
+    setError(''); setSuccess('');
+    try {
+      await budgetsAPI.delete(budgetId);
+      setSuccess('Budget line deleted');
+      loadEditData();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to delete');
+    }
+  };
+
+  const handleAddBudget = async (categoryId) => {
+    setError(''); setSuccess('');
+    try {
+      await budgetsAPI.create({ year, month, category_id: categoryId, budgeted_amount: 0 });
+      setSuccess('Budget line added');
+      loadEditData();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to add budget line');
+    }
+  };
 
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Budget vs. Actual</h2>
         <div className="flex items-center space-x-2">
-          <button
-            className={view === 'monthly' ? 'btn-primary text-sm' : 'btn-secondary text-sm'}
-            onClick={() => setView('monthly')}
-          >Monthly</button>
-          <button
-            className={view === 'ytd' ? 'btn-primary text-sm' : 'btn-secondary text-sm'}
-            onClick={() => setView('ytd')}
-          >Year-to-Date</button>
+          <button className={view === 'monthly' ? 'btn-primary text-sm' : 'btn-secondary text-sm'} onClick={() => setView('monthly')}>Monthly</button>
+          <button className={view === 'ytd' ? 'btn-primary text-sm' : 'btn-secondary text-sm'} onClick={() => setView('ytd')}>Year-to-Date</button>
+          {canEdit && <button className={view === 'edit' ? 'btn-primary text-sm' : 'btn-secondary text-sm'} onClick={() => setView('edit')}>Edit Budget</button>}
         </div>
       </div>
+
+      {error && <div className="bg-red-50 text-red-700 p-3 rounded-lg text-sm mb-4">{error}</div>}
+      {success && <div className="bg-green-50 text-green-700 p-3 rounded-lg text-sm mb-4">{success}</div>}
 
       {/* Period Selector */}
       <div className="card mb-6">
@@ -61,7 +113,7 @@ export default function BudgetPage({ user }) {
               {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
             </select>
           </div>
-          {view === 'monthly' && (
+          {(view === 'monthly' || view === 'edit') && (
             <div>
               <label className="label">Month</label>
               <select className="input w-40" value={month} onChange={e => setMonth(parseInt(e.target.value))}>
@@ -78,7 +130,116 @@ export default function BudgetPage({ user }) {
         <MonthlyView data={comparison} />
       ) : view === 'ytd' && ytd ? (
         <YTDView data={ytd} />
+      ) : view === 'edit' ? (
+        <EditView
+          budgets={allBudgets.filter(b => b.month === month)}
+          categories={categories}
+          year={year}
+          month={month}
+          onUpdate={handleBudgetUpdate}
+          onDelete={handleBudgetDelete}
+          onAdd={handleAddBudget}
+        />
       ) : null}
+    </div>
+  );
+}
+
+function EditView({ budgets, categories, year, month, onUpdate, onDelete, onAdd }) {
+  const [editingId, setEditingId] = useState(null);
+  const [editValue, setEditValue] = useState('');
+
+  const budgetedCategoryIds = budgets.map(b => b.category_id);
+  const missingCategories = categories.filter(c => !budgetedCategoryIds.includes(c.id));
+
+  const incBudgets = budgets.filter(b => b.category_type === 'income');
+  const expBudgets = budgets.filter(b => b.category_type === 'expense');
+
+  const startEdit = (budget) => {
+    setEditingId(budget.id);
+    setEditValue(budget.budgeted_amount);
+  };
+
+  const saveEdit = (budgetId) => {
+    onUpdate(budgetId, editValue);
+    setEditingId(null);
+  };
+
+  const renderRow = (b) => (
+    <tr key={b.id} className="border-b hover:bg-gray-50">
+      <td className="py-2 pl-4 text-gray-900">{b.category_name}</td>
+      <td className="py-2 text-right">
+        {editingId === b.id ? (
+          <div className="flex items-center justify-end gap-1">
+            <span className="text-gray-400">$</span>
+            <input
+              type="number"
+              step="0.01"
+              className="input w-28 text-right py-1 text-sm"
+              value={editValue}
+              onChange={e => setEditValue(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && saveEdit(b.id)}
+              autoFocus
+            />
+            <button className="text-green-600 hover:text-green-800 text-xs font-medium ml-1" onClick={() => saveEdit(b.id)}>Save</button>
+            <button className="text-gray-400 hover:text-gray-600 text-xs ml-1" onClick={() => setEditingId(null)}>Cancel</button>
+          </div>
+        ) : (
+          <span className="cursor-pointer hover:text-blue-600" onClick={() => startEdit(b)}>
+            {fmt(b.budgeted_amount)} ✏️
+          </span>
+        )}
+      </td>
+      <td className="py-2 text-right">
+        <button className="text-red-400 hover:text-red-600 text-xs" onClick={() => onDelete(b.id)}>Delete</button>
+      </td>
+    </tr>
+  );
+
+  return (
+    <div className="card overflow-x-auto">
+      <h3 className="text-lg font-bold mb-4">Edit Budget — {MONTHS[month]} {year}</h3>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-left text-gray-500 border-b">
+            <th className="pb-2">Category</th>
+            <th className="pb-2 text-right">Budgeted Amount</th>
+            <th className="pb-2 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {incBudgets.length > 0 && (
+            <>
+              <tr className="bg-green-50"><td colSpan="3" className="py-2 font-bold text-green-800">INCOME</td></tr>
+              {incBudgets.map(renderRow)}
+            </>
+          )}
+          {expBudgets.length > 0 && (
+            <>
+              <tr className="bg-red-50"><td colSpan="3" className="py-2 font-bold text-red-800">EXPENSES</td></tr>
+              {expBudgets.map(renderRow)}
+            </>
+          )}
+        </tbody>
+      </table>
+
+      {/* Add missing categories */}
+      {missingCategories.length > 0 && (
+        <div className="mt-4 pt-4 border-t">
+          <p className="text-sm text-gray-500 mb-2">Add budget line for:</p>
+          <div className="flex flex-wrap gap-2">
+            {missingCategories.map(c => (
+              <button
+                key={c.id}
+                className="text-xs bg-gray-100 hover:bg-blue-100 text-gray-700 hover:text-blue-700 px-3 py-1 rounded-full transition-colors"
+                onClick={() => onAdd(c.id)}
+              >
+                + {c.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -30,9 +30,13 @@ api.interceptors.response.use(
 // ── Auth ─────────────────────────────────────────────────
 export const authAPI = {
   login: (email, password) => api.post('/auth/login', { email, password }),
+  signup: (data) => api.post('/auth/signup', data),
   me: () => api.get('/auth/me'),
   getUsers: () => api.get('/auth/users'),
   createUser: (data) => api.post('/auth/users', data),
+  updateUser: (id, data) => api.put(`/auth/users/${id}`, data),
+  deactivateUser: (id) => api.delete(`/auth/users/${id}`),
+  changePassword: (data) => api.post('/auth/change-password', data),
 };
 
 // ── Transactions ─────────────────────────────────────────
@@ -60,6 +64,8 @@ export const budgetsAPI = {
   list: (year) => api.get('/budgets', { params: { year } }),
   vsActual: (year, month) => api.get('/budgets/vs-actual', { params: { year, month } }),
   create: (data) => api.post('/budgets', data),
+  update: (id, data) => api.put(`/budgets/${id}`, data),
+  delete: (id) => api.delete(`/budgets/${id}`),
   copy: (data) => api.post('/budgets/copy', data),
   ytd: (year) => api.get('/budgets/ytd', { params: { year } }),
 };
@@ -92,6 +98,24 @@ export const auditAPI = {
 // ── Categories ───────────────────────────────────────────
 export const categoriesAPI = {
   list: (type) => api.get('/categories', { params: { type } }),
+};
+
+// ── Givelify ─────────────────────────────────────────────
+export const givelifyAPI = {
+  list: (params) => api.get('/givelify', { params }),
+  summary: () => api.get('/givelify/summary'),
+  import: (contributions) => api.post('/givelify/import', { contributions }),
+  earmark: (id, fund_id) => api.post(`/givelify/${id}/earmark`, { fund_id }),
+  getEnvelopeMap: () => api.get('/givelify/envelope-map'),
+  updateEnvelopeMap: (map) => api.put('/givelify/envelope-map', { map }),
+};
+
+// ── Backups ──────────────────────────────────────────────
+export const backupsAPI = {
+  list: () => api.get('/backups'),
+  create: (type) => api.post('/backups', { type }),
+  download: (id) => api.get(`/backups/${id}/download`, { responseType: 'blob' }),
+  delete: (id) => api.delete(`/backups/${id}`),
 };
 
 export default api;

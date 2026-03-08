@@ -5,10 +5,12 @@ const navItems = [
   { path: '/', label: 'Dashboard', icon: '📊' },
   { path: '/transactions', label: 'Transactions', icon: '💰' },
   { path: '/funds', label: 'Funds', icon: '🏦' },
+  { path: '/givelify', label: 'Givelify', icon: '💝' },
   { path: '/budget', label: 'Budget', icon: '📋' },
   { path: '/bank', label: 'Bank', icon: '🏧' },
   { path: '/reports', label: 'Reports', icon: '📄' },
   { path: '/audit', label: 'Audit Trail', icon: '🔍' },
+  { path: '/admin', label: 'Admin', icon: '⚙️', adminOnly: true },
 ];
 
 export default function Layout({ user, onLogout, children }) {
@@ -44,7 +46,9 @@ export default function Layout({ user, onLogout, children }) {
       <div className="bg-white border-b shadow-sm">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex space-x-1 overflow-x-auto">
-            {navItems.map((item) => (
+            {navItems
+              .filter(item => !item.adminOnly || user?.role === 'admin')
+              .map((item) => (
               <NavLink
                 key={item.path}
                 to={item.path}
