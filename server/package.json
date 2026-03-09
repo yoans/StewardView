@@ -1,5 +1,5 @@
 {
-  "name": "hrcoc-finance-server",
+  "name": "stewardview-server",
   "version": "1.0.0",
   "description": "HRCOC Finance API Server",
   "main": "src/index.js",

@@ -21,6 +21,8 @@ const auditRoutes = require('./routes/audit');
 const categoryRoutes = require('./routes/categories');
 const givelifyRoutes = require('./routes/givelify');
 const backupRoutes = require('./routes/backups');
+const platformRoutes = require('./routes/platform');
+const onboardingRoutes = require('./routes/onboarding');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -35,6 +37,10 @@ const corsOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(',')
   : ['http://localhost:3000', 'http://localhost:5173'];
 app.use(cors({ origin: corsOrigins, credentials: true }));
+
+// Raw body required for Stripe webhook signature verification (must come BEFORE express.json)
+app.use('/api/onboarding/webhook', express.raw({ type: 'application/json' }));
+
 app.use(express.json());
 app.use(morgan('combined'));
 
@@ -57,6 +63,15 @@ app.use('/api/audit', auditRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/givelify', givelifyRoutes);
 app.use('/api/backups', backupRoutes);
+app.use('/api/platform', platformRoutes);
+app.use('/api/onboarding', onboardingRoutes);
+
+// Serve the public landing/marketing page
+const landingPath = path.join(__dirname, '..', '..', 'landing');
+if (fs.existsSync(landingPath)) {
+  app.use('/landing', express.static(landingPath));
+  app.get('/', (req, res) => res.sendFile(path.join(landingPath, 'index.html')));
+}
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -159,7 +174,7 @@ app.use((err, req, res, next) => {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`
   ╔══════════════════════════════════════════════╗
-  ║   HRCOC Finance Server                      ║
+  ║   StewardView Server                        ║
   ║   Running on port ${PORT}                       ║
   ║   Environment: ${process.env.NODE_ENV || 'development'}              ║
   ╚══════════════════════════════════════════════╝

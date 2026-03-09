@@ -1,17 +1,18 @@
 const router = require('express').Router();
 const db = require('../models/db');
 const { authenticate, authorize } = require('../middleware/auth');
+const { requireTenant } = require('../middleware/tenant');
 const { logAudit } = require('../models/auditLog');
 
 // GET /api/funds — list all funds with balances
-router.get('/', authenticate, async (req, res) => {
-  const funds = await db('funds').where({ is_active: true }).orderBy('name');
+router.get('/', authenticate, requireTenant, async (req, res) => {
+  const funds = await db('funds').where({ is_active: true, tenant_id: req.tenantId }).orderBy('name');
   res.json(funds);
 });
 
 // GET /api/funds/:id — single fund with recent activity
-router.get('/:id', authenticate, async (req, res) => {
-  const fund = await db('funds').where({ id: req.params.id }).first();
+router.get('/:id', authenticate, requireTenant, async (req, res) => {
+  const fund = await db('funds').where({ id: req.params.id, tenant_id: req.tenantId }).first();
   if (!fund) return res.status(404).json({ error: 'Fund not found' });
 
   const recentActivity = await db('fund_transactions')
@@ -23,12 +24,12 @@ router.get('/:id', authenticate, async (req, res) => {
 });
 
 // POST /api/funds — create new earmarked fund
-router.post('/', authenticate, authorize('admin', 'treasurer'), async (req, res) => {
+router.post('/', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
   try {
     const { name, description, target_amount, is_restricted } = req.body;
     const [id] = await db('funds').insert({
       name, description, target_amount, is_restricted: is_restricted || false,
-      current_balance: 0,
+      current_balance: 0, tenant_id: req.tenantId,
     });
 
     await logAudit({
@@ -46,7 +47,7 @@ router.post('/', authenticate, authorize('admin', 'treasurer'), async (req, res)
 });
 
 // PUT /api/funds/:id — update fund details
-router.put('/:id', authenticate, authorize('admin', 'treasurer'), async (req, res) => {
+router.put('/:id', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
   try {
     const existing = await db('funds').where({ id: req.params.id }).first();
     if (!existing) return res.status(404).json({ error: 'Fund not found' });
@@ -74,11 +75,11 @@ router.put('/:id', authenticate, authorize('admin', 'treasurer'), async (req, re
 });
 
 // POST /api/funds/:id/transfer — transfer between funds
-router.post('/:id/transfer', authenticate, authorize('admin', 'treasurer'), async (req, res) => {
+router.post('/:id/transfer', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
   try {
     const { to_fund_id, amount, description } = req.body;
-    const fromFund = await db('funds').where({ id: req.params.id }).first();
-    const toFund = await db('funds').where({ id: to_fund_id }).first();
+    const fromFund = await db('funds').where({ id: req.params.id, tenant_id: req.tenantId }).first();
+    const toFund = await db('funds').where({ id: to_fund_id, tenant_id: req.tenantId }).first();
     if (!fromFund || !toFund) return res.status(404).json({ error: 'Fund not found' });
     if (fromFund.current_balance < amount) return res.status(400).json({ error: 'Insufficient fund balance' });
 
@@ -114,7 +115,10 @@ router.post('/:id/transfer', authenticate, authorize('admin', 'treasurer'), asyn
 });
 
 // GET /api/funds/:id/history — full transaction history for a fund
-router.get('/:id/history', authenticate, async (req, res) => {
+router.get('/:id/history', authenticate, requireTenant, async (req, res) => {
+  // Verify this fund belongs to the tenant
+  const fund = await db('funds').where({ id: req.params.id, tenant_id: req.tenantId }).first();
+  if (!fund) return res.status(404).json({ error: 'Fund not found' });
   const history = await db('fund_transactions')
     .where({ fund_id: req.params.id })
     .orderBy('date', 'desc');

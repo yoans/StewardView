@@ -2,10 +2,11 @@ const router = require('express').Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../models/db');
 const { authenticate, authorize } = require('../middleware/auth');
+const { requireTenant } = require('../middleware/tenant');
 const { logAudit } = require('../models/auditLog');
 
 // GET /api/transactions
-router.get('/', authenticate, async (req, res) => {
+router.get('/', authenticate, requireTenant, async (req, res) => {
   try {
     const { type, category_id, fund_id, status, start_date, end_date, limit = 100, offset = 0 } = req.query;
 
@@ -19,6 +20,7 @@ router.get('/', authenticate, async (req, res) => {
         'funds.name as fund_name',
         'bank_accounts.name as account_name'
       )
+      .where('transactions.tenant_id', req.tenantId)
       .orderBy('transactions.date', 'desc')
       .limit(limit)
       .offset(offset);
@@ -39,19 +41,20 @@ router.get('/', authenticate, async (req, res) => {
 });
 
 // GET /api/transactions/:id
-router.get('/:id', authenticate, async (req, res) => {
+router.get('/:id', authenticate, requireTenant, async (req, res) => {
   const txn = await db('transactions')
     .leftJoin('categories', 'transactions.category_id', 'categories.id')
     .leftJoin('funds', 'transactions.fund_id', 'funds.id')
     .select('transactions.*', 'categories.name as category_name', 'funds.name as fund_name')
     .where('transactions.id', req.params.id)
+    .where('transactions.tenant_id', req.tenantId)
     .first();
   if (!txn) return res.status(404).json({ error: 'Transaction not found' });
   res.json(txn);
 });
 
 // POST /api/transactions
-router.post('/', authenticate, authorize('admin', 'treasurer', 'finance_committee'), async (req, res) => {
+router.post('/', authenticate, requireTenant, authorize('admin', 'treasurer', 'finance_committee'), async (req, res) => {
   try {
     const { type, amount, date, description, payee_payer, check_number, category_id, bank_account_id, fund_id, notes } = req.body;
 
@@ -60,6 +63,7 @@ router.post('/', authenticate, authorize('admin', 'treasurer', 'finance_committe
       ref_number, type, amount, date, description, payee_payer,
       check_number, category_id, bank_account_id, fund_id,
       notes, status: 'pending', created_by: req.user.id,
+      tenant_id: req.tenantId,
     });
 
     // If directed to a fund, create fund transaction
@@ -92,9 +96,9 @@ router.post('/', authenticate, authorize('admin', 'treasurer', 'finance_committe
 });
 
 // PUT /api/transactions/:id
-router.put('/:id', authenticate, authorize('admin', 'treasurer'), async (req, res) => {
+router.put('/:id', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
   try {
-    const existing = await db('transactions').where({ id: req.params.id }).first();
+    const existing = await db('transactions').where({ id: req.params.id, tenant_id: req.tenantId }).first();
     if (!existing) return res.status(404).json({ error: 'Transaction not found' });
 
     const updates = {};
@@ -120,9 +124,9 @@ router.put('/:id', authenticate, authorize('admin', 'treasurer'), async (req, re
 });
 
 // DELETE /api/transactions/:id  (soft-delete: sets status to void)
-router.delete('/:id', authenticate, authorize('admin', 'treasurer'), async (req, res) => {
+router.delete('/:id', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
   try {
-    const existing = await db('transactions').where({ id: req.params.id }).first();
+    const existing = await db('transactions').where({ id: req.params.id, tenant_id: req.tenantId }).first();
     if (!existing) return res.status(404).json({ error: 'Transaction not found' });
 
     await db('transactions').where({ id: req.params.id }).update({ status: 'void', updated_at: new Date().toISOString() });
@@ -142,15 +146,16 @@ router.delete('/:id', authenticate, authorize('admin', 'treasurer'), async (req,
 });
 
 // GET /api/transactions/summary/:year/:month
-router.get('/summary/:year/:month', authenticate, async (req, res) => {
+router.get('/summary/:year/:month', authenticate, requireTenant, async (req, res) => {
   try {
     const { year, month } = req.params;
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-    const endDate = new Date(year, month, 0).toISOString().slice(0, 10); // last day of month
+    const endDate = new Date(year, month, 0).toISOString().slice(0, 10);
 
     const income = await db('transactions')
       .where('type', 'income')
       .where('status', '!=', 'void')
+      .where('tenant_id', req.tenantId)
       .whereBetween('date', [startDate, endDate])
       .sum('amount as total')
       .first();
@@ -158,6 +163,7 @@ router.get('/summary/:year/:month', authenticate, async (req, res) => {
     const expenses = await db('transactions')
       .where('type', 'expense')
       .where('status', '!=', 'void')
+      .where('tenant_id', req.tenantId)
       .whereBetween('date', [startDate, endDate])
       .sum('amount as total')
       .first();
@@ -165,6 +171,7 @@ router.get('/summary/:year/:month', authenticate, async (req, res) => {
     const byCategory = await db('transactions')
       .leftJoin('categories', 'transactions.category_id', 'categories.id')
       .where('transactions.status', '!=', 'void')
+      .where('transactions.tenant_id', req.tenantId)
       .whereBetween('transactions.date', [startDate, endDate])
       .groupBy('categories.name', 'transactions.type')
       .select('categories.name as category', 'transactions.type')

@@ -3,18 +3,19 @@ const path = require('path');
 const fs = require('fs');
 const db = require('../models/db');
 const { authenticate, authorize } = require('../middleware/auth');
+const { requireTenant } = require('../middleware/tenant');
 const { logAudit } = require('../models/auditLog');
 const { generateMonthlyReportPDF } = require('../reports/generateMonthlyReport');
 
 const REPORT_DIR = process.env.REPORT_DIR || path.join(__dirname, '..', '..', 'reports');
 
 // GET /api/reports/monthly?year=2026&month=3
-router.get('/monthly', authenticate, async (req, res) => {
+router.get('/monthly', authenticate, requireTenant, async (req, res) => {
   try {
     const year = parseInt(req.query.year) || new Date().getFullYear();
     const month = parseInt(req.query.month) || new Date().getMonth() + 1;
 
-    const reportData = await buildMonthlyReportData(year, month);
+    const reportData = await buildMonthlyReportData(year, month, req.tenantId, req.tenant?.name);
     res.json(reportData);
   } catch (err) {
     console.error('Monthly report error:', err);
@@ -23,23 +24,23 @@ router.get('/monthly', authenticate, async (req, res) => {
 });
 
 // POST /api/reports/monthly/generate — generate PDF
-router.post('/monthly/generate', authenticate, authorize('admin', 'treasurer'), async (req, res) => {
+router.post('/monthly/generate', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
   try {
     const year = parseInt(req.body.year) || new Date().getFullYear();
     const month = parseInt(req.body.month) || new Date().getMonth() + 1;
 
-    const reportData = await buildMonthlyReportData(year, month);
+    const reportData = await buildMonthlyReportData(year, month, req.tenantId, req.tenant?.name);
 
     // Ensure report directory exists
     if (!fs.existsSync(REPORT_DIR)) fs.mkdirSync(REPORT_DIR, { recursive: true });
 
-    const fileName = `HRCOC_Monthly_Report_${year}_${String(month).padStart(2, '0')}.pdf`;
+    const fileName = `${req.tenantId}_Monthly_Report_${year}_${String(month).padStart(2, '0')}.pdf`;
     const filePath = path.join(REPORT_DIR, fileName);
 
     await generateMonthlyReportPDF(reportData, filePath);
 
     // Save report record
-    const existing = await db('monthly_reports').where({ year, month }).first();
+    const existing = await db('monthly_reports').where({ year, month, tenant_id: req.tenantId }).first();
     if (existing) {
       await db('monthly_reports').where({ id: existing.id }).update({
         file_path: filePath,
@@ -52,6 +53,7 @@ router.post('/monthly/generate', authenticate, authorize('admin', 'treasurer'), 
         year, month, file_path: filePath,
         summary_json: JSON.stringify(reportData),
         generated_by: req.user.id,
+        tenant_id: req.tenantId,
       });
     }
 
@@ -69,11 +71,11 @@ router.post('/monthly/generate', authenticate, authorize('admin', 'treasurer'), 
 });
 
 // GET /api/reports/monthly/download?year=2026&month=3
-router.get('/monthly/download', authenticate, async (req, res) => {
+router.get('/monthly/download', authenticate, requireTenant, async (req, res) => {
   try {
     const year = parseInt(req.query.year);
     const month = parseInt(req.query.month);
-    const report = await db('monthly_reports').where({ year, month }).first();
+    const report = await db('monthly_reports').where({ year, month, tenant_id: req.tenantId }).first();
     if (!report || !report.file_path || !fs.existsSync(report.file_path)) {
       return res.status(404).json({ error: 'Report not found. Generate it first.' });
     }
@@ -85,13 +87,13 @@ router.get('/monthly/download', authenticate, async (req, res) => {
 });
 
 // GET /api/reports/list — list all generated reports
-router.get('/list', authenticate, async (req, res) => {
-  const reports = await db('monthly_reports').orderBy(['year', 'month']);
+router.get('/list', authenticate, requireTenant, async (req, res) => {
+  const reports = await db('monthly_reports').where({ tenant_id: req.tenantId }).orderBy(['year', 'month']);
   res.json(reports);
 });
 
 // GET /api/reports/dashboard — summary data for dashboard
-router.get('/dashboard', authenticate, async (req, res) => {
+router.get('/dashboard', authenticate, requireTenant, async (req, res) => {
   try {
     const now = new Date();
     const year = now.getFullYear();
@@ -100,28 +102,29 @@ router.get('/dashboard', authenticate, async (req, res) => {
     const endDate = new Date(year, month, 0).toISOString().slice(0, 10);
 
     // Bank balances
-    const bankAccounts = await db('bank_accounts').where({ is_active: true });
+    const bankAccounts = await db('bank_accounts').where({ is_active: true, tenant_id: req.tenantId });
     const totalBankBalance = bankAccounts.reduce((s, a) => s + parseFloat(a.current_balance || 0), 0);
 
     // Month income & expenses
     const monthIncome = await db('transactions')
-      .where('type', 'income').where('status', '!=', 'void')
+      .where('type', 'income').where('status', '!=', 'void').where('tenant_id', req.tenantId)
       .whereBetween('date', [startDate, endDate])
       .sum('amount as total').first();
 
     const monthExpenses = await db('transactions')
-      .where('type', 'expense').where('status', '!=', 'void')
+      .where('type', 'expense').where('status', '!=', 'void').where('tenant_id', req.tenantId)
       .whereBetween('date', [startDate, endDate])
       .sum('amount as total').first();
 
     // Fund balances
-    const funds = await db('funds').where({ is_active: true });
+    const funds = await db('funds').where({ is_active: true, tenant_id: req.tenantId });
 
     // Recent transactions
     const recentTransactions = await db('transactions')
       .leftJoin('categories', 'transactions.category_id', 'categories.id')
       .select('transactions.*', 'categories.name as category_name')
       .where('transactions.status', '!=', 'void')
+      .where('transactions.tenant_id', req.tenantId)
       .orderBy('transactions.date', 'desc')
       .limit(10);
 
@@ -206,12 +209,13 @@ async function buildMonthlyReportData(year, month) {
     .leftJoin('categories', 'transactions.category_id', 'categories.id')
     .leftJoin('funds', 'transactions.fund_id', 'funds.id')
     .where('transactions.status', '!=', 'void')
+    .where('transactions.tenant_id', tenantId)
     .whereBetween('transactions.date', [startDate, endDate])
     .select('transactions.*', 'categories.name as category_name', 'funds.name as fund_name')
     .orderBy('transactions.date');
 
   return {
-    title: `HRCOC Monthly Finance Report — ${monthName} ${year}`,
+    title: `${tenantName} Monthly Finance Report — ${monthName} ${year}`,
     period: { year, month, month_name: monthName, start_date: startDate, end_date: endDate },
     bank_accounts: bankAccounts,
     total_bank_balance: bankAccounts.reduce((s, a) => s + parseFloat(a.current_balance || 0), 0),

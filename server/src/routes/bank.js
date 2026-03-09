@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const db = require('../models/db');
 const { authenticate, authorize } = require('../middleware/auth');
+const { requireTenant } = require('../middleware/tenant');
 const { logAudit } = require('../models/auditLog');
 
 let plaidClient = null;
@@ -29,24 +30,26 @@ function getPlaidClient() {
 }
 
 // GET /api/bank/accounts — list all bank accounts
-router.get('/accounts', authenticate, async (req, res) => {
-  const accounts = await db('bank_accounts').where({ is_active: true });
+router.get('/accounts', authenticate, requireTenant, async (req, res) => {
+  const accounts = await db('bank_accounts').where({ is_active: true, tenant_id: req.tenantId });
   res.json(accounts);
 });
 
-// POST /api/bank/link-token — create a Plaid Link token to connect Bank of America
-router.post('/link-token', authenticate, authorize('admin', 'treasurer'), async (req, res) => {
+// POST /api/bank/link-token — create a Plaid Link token (institution-agnostic, user picks their bank)
+router.post('/link-token', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
   try {
     const client = getPlaidClient();
-    if (!client) return res.status(503).json({ error: 'Plaid not configured. Set PLAID_CLIENT_ID and PLAID_SECRET in .env' });
+    if (!client) return res.status(503).json({ error: 'Plaid not configured. Set PLAID_CLIENT_ID and PLAID_SECRET in server/.env' });
+
+    const orgName = req.tenant?.name || process.env.ORG_NAME || 'StewardView';
 
     const response = await client.linkTokenCreate({
       user: { client_user_id: String(req.user.id) },
-      client_name: 'HRCOC Finance',
+      client_name: orgName,
       products: ['transactions'],
       country_codes: ['US'],
       language: 'en',
-      institution_id: 'ins_127989', // Bank of America institution ID in Plaid
+      // No institution_id — lets the user choose any bank from Plaid's 12,000+ institutions
     });
 
     res.json({ link_token: response.data.link_token });
@@ -57,7 +60,7 @@ router.post('/link-token', authenticate, authorize('admin', 'treasurer'), async 
 });
 
 // POST /api/bank/exchange-token — exchange public token after Plaid Link
-router.post('/exchange-token', authenticate, authorize('admin', 'treasurer'), async (req, res) => {
+router.post('/exchange-token', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
   try {
     const client = getPlaidClient();
     if (!client) return res.status(503).json({ error: 'Plaid not configured' });
@@ -67,14 +70,15 @@ router.post('/exchange-token', authenticate, authorize('admin', 'treasurer'), as
     const exchangeResponse = await client.itemPublicTokenExchange({ public_token });
     const accessToken = exchangeResponse.data.access_token;
 
-    // Save each linked account
+    // Save each linked account scoped to this tenant
     for (const account of accounts) {
       const [id] = await db('bank_accounts').insert({
         name: `${institution.name} - ${account.name}`,
         institution: institution.name,
         account_mask: account.mask,
         plaid_account_id: account.id,
-        plaid_access_token: accessToken, // In production, encrypt this
+        plaid_access_token: accessToken,
+        tenant_id: req.tenantId,
       });
 
       await logAudit({
@@ -91,13 +95,15 @@ router.post('/exchange-token', authenticate, authorize('admin', 'treasurer'), as
   }
 });
 
-// POST /api/bank/sync — sync balances and transactions from Bank of America
-router.post('/sync', authenticate, authorize('admin', 'treasurer'), async (req, res) => {
+// POST /api/bank/sync — sync balances and transactions from all Plaid-linked accounts
+router.post('/sync', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
   try {
     const client = getPlaidClient();
     if (!client) return res.status(503).json({ error: 'Plaid not configured' });
 
-    const accounts = await db('bank_accounts').whereNotNull('plaid_access_token').where({ is_active: true });
+    const accounts = await db('bank_accounts')
+      .whereNotNull('plaid_access_token')
+      .where({ is_active: true, tenant_id: req.tenantId });
 
     const results = [];
 
@@ -159,10 +165,10 @@ router.post('/sync', authenticate, authorize('admin', 'treasurer'), async (req, 
 });
 
 // GET /api/bank/balances — quick balance check
-router.get('/balances', authenticate, async (req, res) => {
+router.get('/balances', authenticate, requireTenant, async (req, res) => {
   const accounts = await db('bank_accounts')
-    .where({ is_active: true })
-    .select('id', 'name', 'institution', 'account_mask', 'current_balance', 'available_balance', 'balance_last_updated');
+    .where({ is_active: true, tenant_id: req.tenantId })
+    .select('id', 'name', 'institution', 'account_mask', 'current_balance', 'available_balance', 'balance_last_updated', 'plaid_account_id');
 
   const total = accounts.reduce((sum, a) => sum + parseFloat(a.current_balance || 0), 0);
   res.json({ accounts, total_balance: total });
@@ -176,6 +182,118 @@ router.get('/sync-log', authenticate, async (req, res) => {
     .orderBy('synced_at', 'desc')
     .limit(50);
   res.json(log);
+});
+
+// POST /api/bank/sync/:id — sync a single Plaid account by id
+router.post('/sync/:id', authenticate, authorize('admin', 'treasurer'), async (req, res) => {
+  try {
+    const client = getPlaidClient();
+    if (!client) return res.status(503).json({ error: 'Plaid not configured' });
+
+    const account = await db('bank_accounts').where({ id: req.params.id, is_active: true }).first();
+    if (!account) return res.status(404).json({ error: 'Account not found' });
+    if (!account.plaid_access_token) return res.status(400).json({ error: 'Not a Plaid-linked account' });
+
+    const balanceResponse = await client.accountsBalanceGet({ access_token: account.plaid_access_token });
+    const plaidAcc = balanceResponse.data.accounts.find(a => a.account_id === account.plaid_account_id);
+
+    if (plaidAcc) {
+      await db('bank_accounts').where({ id: account.id }).update({
+        current_balance: plaidAcc.balances.current,
+        available_balance: plaidAcc.balances.available,
+        balance_last_updated: new Date().toISOString(),
+      });
+    }
+
+    await db('bank_sync_log').insert({ bank_account_id: account.id, status: 'success', transactions_synced: 0 });
+    res.json({ message: 'Account synced', balance: plaidAcc?.balances.current });
+  } catch (err) {
+    console.error('Single account sync error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/bank/accounts — create a manual (non-Plaid) bank account
+router.post('/accounts', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
+  try {
+    const { name, institution, account_mask, current_balance, available_balance, account_type } = req.body;
+    if (!name || !institution) return res.status(400).json({ error: 'name and institution are required' });
+
+    const [id] = await db('bank_accounts').insert({
+      name,
+      institution,
+      account_mask: account_mask || null,
+      current_balance: parseFloat(current_balance) || 0,
+      available_balance: parseFloat(available_balance || current_balance) || 0,
+      account_type: account_type || 'checking',
+      balance_last_updated: new Date().toISOString(),
+      tenant_id: req.tenantId,
+    });
+
+    await logAudit({
+      entityType: 'bank_account', entityId: id, action: 'create',
+      newValues: { name, institution },
+      userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+    });
+
+    res.status(201).json({ id, message: 'Account created' });
+  } catch (err) {
+    console.error('Create account error:', err);
+    res.status(500).json({ error: 'Failed to create account' });
+  }
+});
+
+// PUT /api/bank/accounts/:id — update a bank account (name, institution, or manual balance)
+router.put('/accounts/:id', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
+  try {
+    const account = await db('bank_accounts').where({ id: req.params.id, is_active: true, tenant_id: req.tenantId }).first();
+    if (!account) return res.status(404).json({ error: 'Account not found' });
+
+    const { name, institution, account_mask, current_balance, available_balance } = req.body;
+    const updates = {};
+    if (name !== undefined) updates.name = name;
+    if (institution !== undefined) updates.institution = institution;
+    if (account_mask !== undefined) updates.account_mask = account_mask;
+    if (current_balance !== undefined) {
+      updates.current_balance = parseFloat(current_balance);
+      updates.balance_last_updated = new Date().toISOString();
+    }
+    if (available_balance !== undefined) updates.available_balance = parseFloat(available_balance);
+
+    await db('bank_accounts').where({ id: req.params.id }).update(updates);
+
+    await logAudit({
+      entityType: 'bank_account', entityId: req.params.id, action: 'update',
+      oldValues: account, newValues: updates,
+      userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+    });
+
+    res.json({ message: 'Account updated' });
+  } catch (err) {
+    console.error('Update account error:', err);
+    res.status(500).json({ error: 'Failed to update account' });
+  }
+});
+
+// DELETE /api/bank/accounts/:id — deactivate (soft-delete) a bank account
+router.delete('/accounts/:id', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
+  try {
+    const account = await db('bank_accounts').where({ id: req.params.id, tenant_id: req.tenantId }).first();
+    if (!account) return res.status(404).json({ error: 'Account not found' });
+
+    await db('bank_accounts').where({ id: req.params.id }).update({ is_active: false });
+
+    await logAudit({
+      entityType: 'bank_account', entityId: req.params.id, action: 'deactivate',
+      oldValues: { name: account.name }, newValues: { is_active: false },
+      userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+    });
+
+    res.json({ message: 'Account removed' });
+  } catch (err) {
+    console.error('Deactivate account error:', err);
+    res.status(500).json({ error: 'Failed to remove account' });
+  }
 });
 
 module.exports = router;

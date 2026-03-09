@@ -23,16 +23,17 @@ exports.seed = async function (knex) {
   const passwordHash = await bcrypt.hash('changeme123', 10);
 
   await knex('users').insert([
-    { id: 1, email: 'admin@hrcoc.org', password_hash: passwordHash, name: 'Admin User', role: 'admin' },
-    { id: 2, email: 'treasurer@hrcoc.org', password_hash: passwordHash, name: 'Church Treasurer', role: 'admin' },
-    { id: 3, email: 'elder@hrcoc.org', password_hash: passwordHash, name: 'Elder Member', role: 'elder' },
-    { id: 4, email: 'viewer@hrcoc.org', password_hash: passwordHash, name: 'Church Member', role: 'viewer' },
+    { id: 1, email: 'admin@demo.church', password_hash: passwordHash, name: 'Admin User', role: 'admin' },
+    { id: 2, email: 'treasurer@demo.church', password_hash: passwordHash, name: 'Church Treasurer', role: 'admin' },
+    { id: 3, email: 'elder@demo.church', password_hash: passwordHash, name: 'Elder Member', role: 'elder' },
+    { id: 4, email: 'viewer@demo.church', password_hash: passwordHash, name: 'Church Member', role: 'viewer' },
   ]);
 
   // ── Bank Accounts ─────────────────────────────────────
+  // Generic placeholder accounts — update institution/name to match your church's actual bank
   await knex('bank_accounts').insert([
-    { id: 1, name: 'BOA Checking - General', institution: 'Bank of America', account_mask: '4521', current_balance: 45230.00, available_balance: 45230.00 },
-    { id: 2, name: 'BOA Savings - Reserve', institution: 'Bank of America', account_mask: '7893', current_balance: 28500.00, available_balance: 28500.00 },
+    { id: 1, name: 'Checking - General', institution: 'Your Bank', account_mask: '0000', current_balance: 45230.00, available_balance: 45230.00 },
+    { id: 2, name: 'Savings - Reserve', institution: 'Your Bank', account_mask: '0001', current_balance: 28500.00, available_balance: 28500.00 },
   ]);
 
   // ── Categories ────────────────────────────────────────

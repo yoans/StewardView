@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StewardView — Financial Transparency for Every Congregation</title>
+  <meta name="description" content="Secure, simple church finance management. Track giving, funds, budgets, and bank accounts — purpose-built for congregations of all sizes." />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            navy: { 50:'#f0f4ff',100:'#dce8ff',200:'#bad0ff',300:'#84abff',400:'#4d7eff',500:'#2353f5',600:'#1638dd',700:'#1530b5',800:'#162991',900:'#162578',950:'#101748' },
+            gold:  { 50:'#fdfae9',100:'#faf5c5',200:'#f5e878',300:'#f0d93a',400:'#e6c31b',500:'#c7a10e',600:'#a07c09',700:'#7a5b0c',800:'#634911',900:'#553e14',950:'#322208' },
+          },
+          fontFamily: { sans: ['Inter','ui-sans-serif','system-ui','sans-serif'] },
+        }
+      }
+    }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .gradient-hero { background: linear-gradient(135deg, #101748 0%, #162591 50%, #1e3a8a 100%); }
+    .gradient-gold  { background: linear-gradient(135deg, #c7a10e 0%, #e6c31b 100%); }
+    .feature-card:hover { transform: translateY(-4px); }
+    .faq-answer { max-height: 0; overflow: hidden; transition: max-height 0.3s ease, padding 0.3s ease; }
+    .faq-answer.open { max-height: 400px; padding-top: 0.75rem; }
+    .price-input::-webkit-inner-spin-button { -webkit-appearance: none; }
+    .price-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+    @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+    .float { animation: float 4s ease-in-out infinite; }
+  </style>
+</head>
+<body class="text-gray-900 antialiased">
+
+  <!-- ── Navigation ─────────────────────────────────────────── -->
+  <nav class="fixed top-0 left-0 right-0 z-50 bg-navy-950/95 backdrop-blur-sm border-b border-white/10">
+    <div class="max-w-7xl mx-auto px-6 lg:px-8 flex items-center justify-between h-16">
+      <a href="#" class="flex items-center gap-2">
+        <span class="text-2xl">⛪</span>
+        <span class="text-white font-bold text-xl">Steward<span class="text-gold-400">View</span></span>
+      </a>
+      <div class="hidden md:flex items-center gap-8 text-sm text-white/80">
+        <a href="#features" class="hover:text-white transition-colors">Features</a>
+        <a href="#pricing" class="hover:text-white transition-colors">Pricing</a>
+        <a href="#security" class="hover:text-white transition-colors">Security</a>
+        <a href="#faq" class="hover:text-white transition-colors">FAQ</a>
+      </div>
+      <div class="flex items-center gap-3">
+        <a href="/login" class="text-sm text-white/80 hover:text-white transition-colors px-3 py-1.5">Sign In</a>
+        <a href="#get-started" class="text-sm font-semibold bg-gold-400 hover:bg-gold-300 text-navy-950 px-4 py-2 rounded-lg transition-colors">Get Started Free</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ── Hero ───────────────────────────────────────────────── -->
+  <section class="gradient-hero min-h-screen flex items-center pt-16">
+    <div class="max-w-7xl mx-auto px-6 lg:px-8 py-24 grid lg:grid-cols-2 gap-16 items-center">
+      <div>
+        <div class="inline-flex items-center gap-2 bg-white/10 border border-white/20 rounded-full px-4 py-1.5 text-sm text-gold-300 mb-6">
+          <span class="w-2 h-2 bg-gold-400 rounded-full animate-pulse"></span>
+          Purpose-built for congregations
+        </div>
+        <h1 class="text-5xl lg:text-6xl font-bold text-white leading-tight mb-6">
+          Financial Transparency<br/>
+          <span class="text-gold-400">Your Church Deserves</span>
+        </h1>
+        <p class="text-xl text-white/70 mb-8 leading-relaxed">
+          Track giving, manage earmarked funds, monitor bank accounts, run monthly reports — all in one secure platform
+          your team can actually use. No spreadsheets. No confusion. Full accountability.
+        </p>
+        <div class="flex flex-col sm:flex-row gap-4">
+          <a href="#get-started" class="text-center font-bold bg-gold-400 hover:bg-gold-300 text-navy-950 px-8 py-4 rounded-xl text-lg transition-all hover:scale-105 shadow-lg shadow-gold-500/20">
+            Start Free Today →
+          </a>
+          <a href="#features" class="text-center font-medium border border-white/30 hover:border-white/60 text-white px-8 py-4 rounded-xl text-lg transition-colors">
+            See All Features
+          </a>
+        </div>
+        <div class="mt-10 flex items-center gap-6 text-sm text-white/50">
+          <div class="flex items-center gap-2"><span class="text-green-400">✓</span> No credit card required to start</div>
+          <div class="flex items-center gap-2"><span class="text-green-400">✓</span> Your data, always yours</div>
+        </div>
+      </div>
+
+      <!-- Dashboard Preview -->
+      <div class="float relative">
+        <div class="bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20 p-6 shadow-2xl">
+          <div class="flex items-center justify-between mb-4">
+            <span class="text-white font-semibold">Financial Dashboard</span>
+            <span class="text-xs text-white/40">Live</span>
+          </div>
+          <div class="grid grid-cols-2 gap-3 mb-4">
+            <div class="bg-white/10 rounded-xl p-4">
+              <p class="text-xs text-white/50 mb-1">Total Bank Balance</p>
+              <p class="text-2xl font-bold text-white">$73,730</p>
+              <p class="text-xs text-green-400 mt-1">↑ 4.2% this month</p>
+            </div>
+            <div class="bg-white/10 rounded-xl p-4">
+              <p class="text-xs text-white/50 mb-1">Monthly Income</p>
+              <p class="text-2xl font-bold text-white">$12,450</p>
+              <p class="text-xs text-green-400 mt-1">↑ vs budget</p>
+            </div>
+            <div class="bg-white/10 rounded-xl p-4">
+              <p class="text-xs text-white/50 mb-1">Monthly Expenses</p>
+              <p class="text-2xl font-bold text-white">$9,820</p>
+              <p class="text-xs text-white/40 mt-1">Within budget</p>
+            </div>
+            <div class="bg-white/10 rounded-xl p-4">
+              <p class="text-xs text-white/50 mb-1">Net This Month</p>
+              <p class="text-2xl font-bold text-green-400">+$2,630</p>
+              <p class="text-xs text-green-400/70 mt-1">Healthy surplus</p>
+            </div>
+          </div>
+          <div class="bg-white/10 rounded-xl p-4">
+            <p class="text-xs text-white/50 mb-3">Earmarked Funds</p>
+            <div class="space-y-2">
+              <div>
+                <div class="flex justify-between text-xs mb-1">
+                  <span class="text-white/70">Building Fund</span>
+                  <span class="text-white font-medium">$12,000 / $50,000</span>
+                </div>
+                <div class="w-full bg-white/10 rounded-full h-1.5">
+                  <div class="bg-gold-400 h-1.5 rounded-full" style="width:24%"></div>
+                </div>
+              </div>
+              <div>
+                <div class="flex justify-between text-xs mb-1">
+                  <span class="text-white/70">Missions Fund</span>
+                  <span class="text-white font-medium">$8,500 / $24,000</span>
+                </div>
+                <div class="w-full bg-white/10 rounded-full h-1.5">
+                  <div class="bg-blue-400 h-1.5 rounded-full" style="width:35%"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Stats Bar ───────────────────────────────────────────── -->
+  <section class="bg-navy-950 border-y border-white/10 py-8">
+    <div class="max-w-7xl mx-auto px-6 lg:px-8 grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+      <div>
+        <p class="text-3xl font-bold text-gold-400">12,000+</p>
+        <p class="text-sm text-white/50 mt-1">Banks Supported via Plaid</p>
+      </div>
+      <div>
+        <p class="text-3xl font-bold text-gold-400">100%</p>
+        <p class="text-sm text-white/50 mt-1">Your Data Ownership</p>
+      </div>
+      <div>
+        <p class="text-3xl font-bold text-gold-400">2-Factor</p>
+        <p class="text-sm text-white/50 mt-1">Audit Trail for Everything</p>
+      </div>
+      <div>
+        <p class="text-3xl font-bold text-gold-400">Free</p>
+        <p class="text-sm text-white/50 mt-1">To Start, Pay What You Wish</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Features ───────────────────────────────────────────── -->
+  <section id="features" class="py-24 bg-gray-50">
+    <div class="max-w-7xl mx-auto px-6 lg:px-8">
+      <div class="text-center mb-16">
+        <h2 class="text-4xl font-bold text-navy-900 mb-4">Everything Your Finance Team Needs</h2>
+        <p class="text-xl text-gray-500 max-w-2xl mx-auto">Built from the ground up for how churches actually handle money — not adapted from generic accounting software.</p>
+      </div>
+
+      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <!-- Feature 1 -->
+        <div class="feature-card bg-white rounded-2xl p-6 shadow-sm border border-gray-100 transition-all duration-300 cursor-default">
+          <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center text-2xl mb-4">🏦</div>
+          <h3 class="font-bold text-xl text-gray-900 mb-2">Bank Account Sync</h3>
+          <p class="text-gray-500 leading-relaxed">Connect any bank or credit union via Plaid — or add accounts manually. Balances sync automatically. Works with Chase, Wells Fargo, any local credit union, and 12,000+ more.</p>
+        </div>
+        <!-- Feature 2 -->
+        <div class="feature-card bg-white rounded-2xl p-6 shadow-sm border border-gray-100 transition-all duration-300 cursor-default">
+          <div class="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center text-2xl mb-4">📌</div>
+          <h3 class="font-bold text-xl text-gray-900 mb-2">Earmarked Fund Tracking</h3>
+          <p class="text-gray-500 leading-relaxed">Building fund, missions fund, benevolence, youth — each tracked separately with balances, goals, and restricted/unrestricted designations. Donors always know where their gifts go.</p>
+        </div>
+        <!-- Feature 3 -->
+        <div class="feature-card bg-white rounded-2xl p-6 shadow-sm border border-gray-100 transition-all duration-300 cursor-default">
+          <div class="w-12 h-12 bg-violet-100 rounded-xl flex items-center justify-center text-2xl mb-4">📊</div>
+          <h3 class="font-bold text-xl text-gray-900 mb-2">Budget vs. Actual</h3>
+          <p class="text-gray-500 leading-relaxed">Set annual or monthly budgets by category. See real-time progress. Copy budgets year-to-year with one click. Present clearly to elders or the congregation.</p>
+        </div>
+        <!-- Feature 4 -->
+        <div class="feature-card bg-white rounded-2xl p-6 shadow-sm border border-gray-100 transition-all duration-300 cursor-default">
+          <div class="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center text-2xl mb-4">📋</div>
+          <h3 class="font-bold text-xl text-gray-900 mb-2">Monthly PDF Reports</h3>
+          <p class="text-gray-500 leading-relaxed">Auto-generated on the 1st of every month. Share with elders, deacons, or the congregation. Includes income, expenses, fund balances, and budget comparison — professionally formatted.</p>
+        </div>
+        <!-- Feature 5 -->
+        <div class="feature-card bg-white rounded-2xl p-6 shadow-sm border border-gray-100 transition-all duration-300 cursor-default">
+          <div class="w-12 h-12 bg-pink-100 rounded-xl flex items-center justify-center text-2xl mb-4">🎁</div>
+          <h3 class="font-bold text-xl text-gray-900 mb-2">Givelify Integration</h3>
+          <p class="text-gray-500 leading-relaxed">Import Givelify giving data with one click. Categorize digital contributions alongside cash and check offerings. Full contribution history and donor reports.</p>
+        </div>
+        <!-- Feature 6 -->
+        <div class="feature-card bg-white rounded-2xl p-6 shadow-sm border border-gray-100 transition-all duration-300 cursor-default">
+          <div class="w-12 h-12 bg-teal-100 rounded-xl flex items-center justify-center text-2xl mb-4">🔍</div>
+          <h3 class="font-bold text-xl text-gray-900 mb-2">Full Audit Trail</h3>
+          <p class="text-gray-500 leading-relaxed">Every transaction, edit, and deletion is logged with who did it and when. Immutable audit history. Two-admin requirement enforced by the system. Accountability built in.</p>
+        </div>
+        <!-- Feature 7 -->
+        <div class="feature-card bg-white rounded-2xl p-6 shadow-sm border border-gray-100 transition-all duration-300 cursor-default">
+          <div class="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center text-2xl mb-4">👥</div>
+          <h3 class="font-bold text-xl text-gray-900 mb-2">Role-Based Access</h3>
+          <p class="text-gray-500 leading-relaxed">Admin, Treasurer, Finance Committee, Elder, Viewer — each with the right level of access. Elders can see everything. Members can view summaries. No over-sharing, no gatekeeping.</p>
+        </div>
+        <!-- Feature 8 -->
+        <div class="feature-card bg-white rounded-2xl p-6 shadow-sm border border-gray-100 transition-all duration-300 cursor-default">
+          <div class="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center text-2xl mb-4">🎨</div>
+          <h3 class="font-bold text-xl text-gray-900 mb-2">Your Branding</h3>
+          <p class="text-gray-500 leading-relaxed">Each congregation gets their own instance with their church name, colors, and logo. It feels like your software, not generic software you're borrowing.</p>
+        </div>
+        <!-- Feature 9 -->
+        <div class="feature-card bg-white rounded-2xl p-6 shadow-sm border border-gray-100 transition-all duration-300 cursor-default">
+          <div class="w-12 h-12 bg-cyan-100 rounded-xl flex items-center justify-center text-2xl mb-4">💾</div>
+          <h3 class="font-bold text-xl text-gray-900 mb-2">Daily Backups + Data Export</h3>
+          <p class="text-gray-500 leading-relaxed">Automated daily backups. One-click full data export at any time. Your data is always yours — no vendor lock-in. If you leave, you keep everything.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── How It Works ────────────────────────────────────────── -->
+  <section class="py-24 bg-white">
+    <div class="max-w-5xl mx-auto px-6 lg:px-8">
+      <div class="text-center mb-16">
+        <h2 class="text-4xl font-bold text-navy-900 mb-4">Up and Running in Minutes</h2>
+        <p class="text-xl text-gray-500">We handle all the technical setup. You just add your church's information.</p>
+      </div>
+      <div class="grid md:grid-cols-3 gap-8">
+        <div class="text-center">
+          <div class="w-16 h-16 bg-navy-100 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4">📝</div>
+          <div class="inline-flex items-center justify-center w-7 h-7 bg-navy-900 text-white text-sm font-bold rounded-full mb-3">1</div>
+          <h3 class="font-bold text-xl mb-2">Register Your Church</h3>
+          <p class="text-gray-500">Enter your congregation's name, set up your admin account, and choose your plan. Takes 2 minutes.</p>
+        </div>
+        <div class="text-center">
+          <div class="w-16 h-16 bg-gold-100 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4">⚙️</div>
+          <div class="inline-flex items-center justify-center w-7 h-7 bg-navy-900 text-white text-sm font-bold rounded-full mb-3">2</div>
+          <h3 class="font-bold text-xl mb-2">We Set Up Your Instance</h3>
+          <p class="text-gray-500">Your dedicated environment is provisioned instantly — your name, your branding, your isolated data. Invite your treasurer and elders.</p>
+        </div>
+        <div class="text-center">
+          <div class="w-16 h-16 bg-emerald-100 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4">🚀</div>
+          <div class="inline-flex items-center justify-center w-7 h-7 bg-navy-900 text-white text-sm font-bold rounded-full mb-3">3</div>
+          <h3 class="font-bold text-xl mb-2">Start Tracking</h3>
+          <p class="text-gray-500">Connect your bank, enter your categories, and start recording transactions. Your first monthly report generates automatically.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Pricing ─────────────────────────────────────────────── -->
+  <section id="pricing" class="py-24 bg-navy-950">
+    <div class="max-w-4xl mx-auto px-6 lg:px-8">
+      <div class="text-center mb-12">
+        <h2 class="text-4xl font-bold text-white mb-4">Name Your Price</h2>
+        <p class="text-xl text-white/60 max-w-2xl mx-auto">
+          We believe every congregation deserves professional-grade financial tools regardless of size.
+          Start free. Pay what feels right. We trust you.
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-6">
+        <!-- Free -->
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-6 text-center hover:border-white/30 transition-colors">
+          <h3 class="text-lg font-bold text-white mb-2">Free</h3>
+          <p class="text-4xl font-bold text-white mb-1">$0<span class="text-lg text-white/40">/mo</span></p>
+          <p class="text-sm text-white/40 mb-6">For small or new congregations</p>
+          <ul class="text-sm text-white/70 space-y-2 text-left mb-6">
+            <li class="flex items-center gap-2"><span class="text-green-400">✓</span> Full access to all features</li>
+            <li class="flex items-center gap-2"><span class="text-green-400">✓</span> Up to 5 users</li>
+            <li class="flex items-center gap-2"><span class="text-green-400">✓</span> Email support</li>
+            <li class="flex items-center gap-2"><span class="text-yellow-400">○</span> Community support priority</li>
+          </ul>
+          <a href="#get-started" class="block w-full text-center border border-white/30 hover:border-white/60 text-white font-medium py-3 rounded-xl transition-colors text-sm">
+            Get Started Free
+          </a>
+        </div>
+
+        <!-- Supported -->
+        <div class="bg-gradient-to-b from-gold-500/20 to-gold-500/5 border-2 border-gold-400 rounded-2xl p-6 text-center relative">
+          <div class="absolute -top-3 left-1/2 -translate-x-1/2 bg-gold-400 text-navy-950 text-xs font-bold px-3 py-1 rounded-full">MOST POPULAR</div>
+          <h3 class="text-lg font-bold text-white mb-2">Supported</h3>
+          <div class="flex items-center justify-center gap-1 mb-1">
+            <span class="text-2xl font-bold text-gold-400">$</span>
+            <input id="custom-price" type="number" min="10" max="999" value="39"
+              class="price-input w-20 text-4xl font-bold text-gold-400 bg-transparent text-center border-b-2 border-gold-400/40 focus:outline-none focus:border-gold-400 [appearance:textfield]"
+              oninput="updatePrice(this.value)">
+            <span class="text-lg text-white/40">/mo</span>
+          </div>
+          <p id="price-note" class="text-sm text-gold-300/60 mb-6">A suggested amount for an average congregation</p>
+          <ul class="text-sm text-white/70 space-y-2 text-left mb-6">
+            <li class="flex items-center gap-2"><span class="text-green-400">✓</span> Everything in Free</li>
+            <li class="flex items-center gap-2"><span class="text-green-400">✓</span> Unlimited users</li>
+            <li class="flex items-center gap-2"><span class="text-green-400">✓</span> Priority email support</li>
+            <li class="flex items-center gap-2"><span class="text-green-400">✓</span> Keeps the platform running</li>
+          </ul>
+          <a id="supported-cta" href="#get-started?plan=supported&amount=39" class="block w-full text-center gradient-gold text-navy-950 font-bold py-3 rounded-xl transition-all hover:scale-105 text-sm shadow-lg shadow-gold-500/20">
+            Support at $39/mo →
+          </a>
+        </div>
+
+        <!-- Partner -->
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-6 text-center hover:border-white/30 transition-colors">
+          <h3 class="text-lg font-bold text-white mb-2">Partner</h3>
+          <p class="text-4xl font-bold text-white mb-1">$99+<span class="text-lg text-white/40">/mo</span></p>
+          <p class="text-sm text-white/40 mb-6">For larger or multi-site congregations</p>
+          <ul class="text-sm text-white/70 space-y-2 text-left mb-6">
+            <li class="flex items-center gap-2"><span class="text-green-400">✓</span> Everything in Supported</li>
+            <li class="flex items-center gap-2"><span class="text-green-400">✓</span> White-glove onboarding</li>
+            <li class="flex items-center gap-2"><span class="text-green-400">✓</span> Phone + video support</li>
+            <li class="flex items-center gap-2"><span class="text-green-400">✓</span> Custom feature requests</li>
+          </ul>
+          <a href="mailto:hello@stewardview.app?subject=Partner Plan" class="block w-full text-center border border-white/30 hover:border-white/60 text-white font-medium py-3 rounded-xl transition-colors text-sm">
+            Contact Us
+          </a>
+        </div>
+      </div>
+
+      <p class="text-center text-sm text-white/30 mt-8">
+        All plans include full data export. If you cancel, you keep your data — your instance is suspended, not deleted.
+        No contracts. Cancel anytime.
+      </p>
+    </div>
+  </section>
+
+  <!-- ── Security ────────────────────────────────────────────── -->
+  <section id="security" class="py-24 bg-white">
+    <div class="max-w-5xl mx-auto px-6 lg:px-8 grid lg:grid-cols-2 gap-12 items-center">
+      <div>
+        <h2 class="text-4xl font-bold text-navy-900 mb-4">Security You Can<br/> Present to Your Elders</h2>
+        <p class="text-xl text-gray-500 mb-8">Church finances require the highest level of trust. StewardView is built for that.</p>
+        <div class="space-y-4">
+          <div class="flex items-start gap-4">
+            <div class="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center text-xl flex-shrink-0">🔐</div>
+            <div>
+              <h4 class="font-semibold text-gray-900">Complete Data Isolation</h4>
+              <p class="text-gray-500 text-sm mt-0.5">Your church's data is logically isolated from every other congregation. No cross-tenant access is possible.</p>
+            </div>
+          </div>
+          <div class="flex items-start gap-4">
+            <div class="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center text-xl flex-shrink-0">🔑</div>
+            <div>
+              <h4 class="font-semibold text-gray-900">JWT Authentication + Role-Based Access</h4>
+              <p class="text-gray-500 text-sm mt-0.5">Industry-standard tokens. Every user has a role — Admin, Treasurer, Elder, Finance Committee, or Viewer. Access is enforced server-side.</p>
+            </div>
+          </div>
+          <div class="flex items-start gap-4">
+            <div class="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center text-xl flex-shrink-0">📜</div>
+            <div>
+              <h4 class="font-semibold text-gray-900">Immutable Audit Log</h4>
+              <p class="text-gray-500 text-sm mt-0.5">Every change is logged with who made it, when, and what changed. Nothing can be quietly undone.</p>
+            </div>
+          </div>
+          <div class="flex items-start gap-4">
+            <div class="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center text-xl flex-shrink-0">🏦</div>
+            <div>
+              <h4 class="font-semibold text-gray-900">Bank-Grade Plaid Integration</h4>
+              <p class="text-gray-500 text-sm mt-0.5">Banking credentials are never stored — Plaid handles all bank authentication with 256-bit encryption.</p>
+            </div>
+          </div>
+          <div class="flex items-start gap-4">
+            <div class="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center text-xl flex-shrink-0">👥</div>
+            <div>
+              <h4 class="font-semibold text-gray-900">Dual-Admin Requirement</h4>
+              <p class="text-gray-500 text-sm mt-0.5">The system enforces a minimum of two active admin accounts — protecting against single-point-of-failure access control.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="bg-navy-950 rounded-2xl p-8 text-white">
+        <h3 class="font-bold text-xl mb-6 text-gold-400">Data Ownership Promise</h3>
+        <div class="space-y-4 text-sm text-white/80 leading-relaxed">
+          <p>🌟 <strong class="text-white">Your data belongs to you.</strong> Always. We are the platform, not the owner.</p>
+          <p>💾 <strong class="text-white">Export anytime.</strong> Full JSON data export is available at any time from the admin panel.</p>
+          <p>❌ <strong class="text-white">Cancel = Suspended, not deleted.</strong> If you cancel your subscription, your instance is turned off but your data is fully preserved. Reactivate anytime to pick up where you left off.</p>
+          <p>🚚 <strong class="text-white">Self-host option.</strong> This software is available to run on your own servers. We'll help you migrate.</p>
+          <p>🤝 <strong class="text-white">No vendor lock-in.</strong> Standard formats, open data structures. Your treasurer can read the export with any spreadsheet tool.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FAQ ─────────────────────────────────────────────────── -->
+  <section id="faq" class="py-24 bg-gray-50">
+    <div class="max-w-3xl mx-auto px-6 lg:px-8">
+      <div class="text-center mb-12">
+        <h2 class="text-4xl font-bold text-navy-900 mb-4">Common Questions</h2>
+      </div>
+      <div class="space-y-3" id="faq-list">
+        <div class="faq-item bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <button class="w-full text-left px-6 py-4 font-semibold text-gray-900 flex justify-between items-center hover:bg-gray-50 transition-colors" onclick="toggleFaq(this)">
+            Is it really free?
+            <span class="text-gray-400 text-lg transition-transform">+</span>
+          </button>
+          <div class="faq-answer px-6 text-gray-600 text-sm leading-relaxed">
+            Yes. The Free plan includes everything — all features, all integrations, all reports. We ask that you contribute what you're able because keeping the platform running costs money. But we will never lock a small congregation out of the tools they need to be financially accountable to their congregation.
+          </div>
+        </div>
+        <div class="faq-item bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <button class="w-full text-left px-6 py-4 font-semibold text-gray-900 flex justify-between items-center hover:bg-gray-50 transition-colors" onclick="toggleFaq(this)">
+            What happens to our data if we cancel?
+            <span class="text-gray-400 text-lg transition-transform">+</span>
+          </button>
+          <div class="faq-answer px-6 text-gray-600 text-sm leading-relaxed">
+            Your instance will be suspended — users can no longer log in. But your data is fully preserved. You can export everything from the admin panel before canceling, or reactivate your account at any time to restore full access. Data is never deleted.
+          </div>
+        </div>
+        <div class="faq-item bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <button class="w-full text-left px-6 py-4 font-semibold text-gray-900 flex justify-between items-center hover:bg-gray-50 transition-colors" onclick="toggleFaq(this)">
+            Can we use our own bank?
+            <span class="text-gray-400 text-lg transition-transform">+</span>
+          </button>
+          <div class="faq-answer px-6 text-gray-600 text-sm leading-relaxed">
+            Yes — any bank. We integrate with Plaid which supports over 12,000 financial institutions including Chase, Wells Fargo, Bank of America, local credit unions, and more. If your bank isn't on Plaid, you can manage accounts manually and enter balances yourself.
+          </div>
+        </div>
+        <div class="faq-item bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <button class="w-full text-left px-6 py-4 font-semibold text-gray-900 flex justify-between items-center hover:bg-gray-50 transition-colors" onclick="toggleFaq(this)">
+            Is my church's data separate from other churches?
+            <span class="text-gray-400 text-lg transition-transform">+</span>
+          </button>
+          <div class="faq-answer px-6 text-gray-600 text-sm leading-relaxed">
+            Absolutely. Each congregation gets a completely isolated environment. Your transactions, your funds, your users — none of it is accessible to any other organization on the platform. This is enforced at the database level, not just the interface.
+          </div>
+        </div>
+        <div class="faq-item bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <button class="w-full text-left px-6 py-4 font-semibold text-gray-900 flex justify-between items-center hover:bg-gray-50 transition-colors" onclick="toggleFaq(this)">
+            How quickly can we get set up?
+            <span class="text-gray-400 text-lg transition-transform">+</span>
+          </button>
+          <div class="faq-answer px-6 text-gray-600 text-sm leading-relaxed">
+            Your account is created immediately when you sign up. You can start entering data right away. Connecting your bank via Plaid takes about 5 minutes. Most churches are fully operational within an hour.
+          </div>
+        </div>
+        <div class="faq-item bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <button class="w-full text-left px-6 py-4 font-semibold text-gray-900 flex justify-between items-center hover:bg-gray-50 transition-colors" onclick="toggleFaq(this)">
+            What if we want to self-host?
+            <span class="text-gray-400 text-lg transition-colors">+</span>
+          </button>
+          <div class="faq-answer px-6 text-gray-600 text-sm leading-relaxed">
+            StewardView is built on open-source technology (Node.js, PostgreSQL). If your congregation has the technical resources to self-host, we can help you get set up on your own server or cloud provider. Contact us to discuss this option.
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Sign Up Form ────────────────────────────────────────── -->
+  <section id="get-started" class="py-24 gradient-hero">
+    <div class="max-w-2xl mx-auto px-6 lg:px-8">
+      <div class="text-center mb-10">
+        <h2 class="text-4xl font-bold text-white mb-4">Set Up Your Church's Account</h2>
+        <p class="text-xl text-white/60">Your dedicated instance will be ready immediately. No credit card required to start.</p>
+      </div>
+
+      <div class="bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20 p-8">
+        <form id="signup-form" onsubmit="handleSignup(event)">
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-white/80 mb-1.5">Church / Congregation Name *</label>
+              <input type="text" id="church-name" required placeholder="e.g. Grace Community Church"
+                class="w-full bg-white/10 border border-white/20 text-white placeholder-white/30 rounded-xl px-4 py-3 focus:outline-none focus:border-gold-400 focus:ring-1 focus:ring-gold-400 transition-colors" />
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-white/80 mb-1.5">Your Name *</label>
+                <input type="text" id="admin-name" required placeholder="John Smith"
+                  class="w-full bg-white/10 border border-white/20 text-white placeholder-white/30 rounded-xl px-4 py-3 focus:outline-none focus:border-gold-400 transition-colors" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-white/80 mb-1.5">Your Role</label>
+                <select id="admin-role" class="w-full bg-navy-900 border border-white/20 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-gold-400 transition-colors">
+                  <option value="treasurer">Treasurer</option>
+                  <option value="admin">Financial Admin</option>
+                  <option value="elder">Elder / Deacon</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-white/80 mb-1.5">Email Address *</label>
+              <input type="email" id="admin-email" required placeholder="treasurer@yourchurch.org"
+                class="w-full bg-white/10 border border-white/20 text-white placeholder-white/30 rounded-xl px-4 py-3 focus:outline-none focus:border-gold-400 transition-colors" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-white/80 mb-1.5">Password *</label>
+              <input type="password" id="admin-password" required placeholder="At least 8 characters" minlength="8"
+                class="w-full bg-white/10 border border-white/20 text-white placeholder-white/30 rounded-xl px-4 py-3 focus:outline-none focus:border-gold-400 transition-colors" />
+            </div>
+
+            <!-- Plan selection -->
+            <div>
+              <label class="block text-sm font-medium text-white/80 mb-2">Support Level</label>
+              <div class="grid grid-cols-3 gap-3" id="plan-selector">
+                <button type="button" onclick="selectPlan('free', 0)" class="plan-btn active border-2 border-white/30 rounded-xl p-3 text-center text-sm transition-all" data-plan="free">
+                  <div class="font-bold text-white">Free</div>
+                  <div class="text-white/50 text-xs">$0/mo</div>
+                </button>
+                <button type="button" onclick="selectPlan('supported', 39)" class="plan-btn border-2 border-white/10 rounded-xl p-3 text-center text-sm transition-all" data-plan="supported">
+                  <div class="font-bold text-white">Support Us</div>
+                  <div class="text-gold-400 text-xs font-medium" id="plan-supported-label">$39/mo</div>
+                </button>
+                <button type="button" onclick="selectPlan('partner', 99)" class="plan-btn border-2 border-white/10 rounded-xl p-3 text-center text-sm transition-all" data-plan="partner">
+                  <div class="font-bold text-white">Partner</div>
+                  <div class="text-white/50 text-xs">$99+/mo</div>
+                </button>
+              </div>
+            </div>
+
+            <div id="form-error" class="hidden text-red-300 text-sm bg-red-900/30 rounded-lg px-4 py-3"></div>
+
+            <button type="submit" id="submit-btn"
+              class="w-full gradient-gold text-navy-950 font-bold py-4 rounded-xl text-lg transition-all hover:scale-105 shadow-lg shadow-gold-500/20 mt-2">
+              Create Our Church Account →
+            </button>
+          </div>
+        </form>
+        <p class="text-center text-xs text-white/30 mt-4">
+          By signing up you agree to our <a href="#" class="underline hover:text-white/60">Terms of Service</a> and <a href="#" class="underline hover:text-white/60">Privacy Policy</a>.
+          We reserve the right to suspend accounts that are inactive or violate our terms.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Footer ──────────────────────────────────────────────── -->
+  <footer class="bg-gray-900 text-white py-12">
+    <div class="max-w-7xl mx-auto px-6 lg:px-8 grid md:grid-cols-4 gap-8">
+      <div class="md:col-span-2">
+        <div class="flex items-center gap-2 mb-3">
+          <span class="text-2xl">⛪</span>
+          <span class="font-bold text-xl">Steward<span class="text-gold-400">View</span></span>
+        </div>
+        <p class="text-gray-400 text-sm leading-relaxed max-w-sm">Financial transparency and accountability tools built for congregations. Purpose-built. Not adapted.</p>
+        <p class="text-xs text-gray-600 mt-4">Made with ✝️ for the body of Christ.</p>
+      </div>
+      <div>
+        <h4 class="font-semibold mb-3 text-gray-300">Product</h4>
+        <ul class="space-y-2 text-sm text-gray-500">
+          <li><a href="#features" class="hover:text-white transition-colors">Features</a></li>
+          <li><a href="#pricing" class="hover:text-white transition-colors">Pricing</a></li>
+          <li><a href="#security" class="hover:text-white transition-colors">Security</a></li>
+          <li><a href="#faq" class="hover:text-white transition-colors">FAQ</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4 class="font-semibold mb-3 text-gray-300">Support</h4>
+        <ul class="space-y-2 text-sm text-gray-500">
+          <li><a href="mailto:hello@stewardview.app" class="hover:text-white transition-colors">Contact Us</a></li>
+          <li><a href="/login" class="hover:text-white transition-colors">Sign In</a></li>
+          <li><a href="#get-started" class="hover:text-white transition-colors">Get Started</a></li>
+          <li><a href="#" class="hover:text-white transition-colors">Terms of Service</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="border-t border-gray-800 mt-8 pt-6 text-center text-xs text-gray-600 max-w-7xl mx-auto px-6">
+      © 2026 StewardView. All rights reserved. Plaid and Givelify are third-party services. Stripe payments processed securely.
+    </div>
+  </footer>
+
+  <script>
+    // ── FAQ toggle ───────────────────────────────────────────
+    function toggleFaq(btn) {
+      const answer = btn.nextElementSibling;
+      const icon = btn.querySelector('span');
+      const isOpen = answer.classList.toggle('open');
+      icon.style.transform = isOpen ? 'rotate(45deg)' : '';
+      icon.style.transition = 'transform 0.2s';
+    }
+
+    // ── Pricing input ────────────────────────────────────────
+    function updatePrice(val) {
+      const v = parseInt(val) || 0;
+      const btn = document.getElementById('supported-cta');
+      const note = document.getElementById('price-note');
+      btn.href = `#get-started?plan=supported&amount=${v}`;
+      btn.textContent = v > 0 ? `Support at $${v}/mo →` : 'Support Free →';
+      if (v === 0) note.textContent = 'Starting free — contribute when you can';
+      else if (v < 25) note.textContent = 'Every bit helps keep the platform running';
+      else if (v < 75) note.textContent = 'A suggested amount for an average congregation';
+      else note.textContent = 'Thank you for your generous support!';
+      document.getElementById('plan-supported-label').textContent = v > 0 ? `$${v}/mo` : '$0/mo';
+    }
+
+    // ── Plan selection ───────────────────────────────────────
+    let selectedPlan = 'free';
+    let selectedAmount = 0;
+    function selectPlan(plan, amount) {
+      selectedPlan = plan;
+      selectedAmount = plan === 'supported' ? (parseInt(document.getElementById('custom-price')?.value) || amount) : amount;
+      document.querySelectorAll('.plan-btn').forEach(b => {
+        const active = b.dataset.plan === plan;
+        b.classList.toggle('border-gold-400', active);
+        b.classList.toggle('bg-gold-400/10', active);
+        b.classList.toggle('border-white/10', !active);
+      });
+    }
+
+    // ── Signup form ──────────────────────────────────────────
+    async function handleSignup(e) {
+      e.preventDefault();
+      const btn = document.getElementById('submit-btn');
+      const errDiv = document.getElementById('form-error');
+      btn.disabled = true;
+      btn.textContent = 'Creating your account...';
+      errDiv.classList.add('hidden');
+
+      const payload = {
+        churchName: document.getElementById('church-name').value.trim(),
+        adminName: document.getElementById('admin-name').value.trim(),
+        adminEmail: document.getElementById('admin-email').value.trim(),
+        adminPassword: document.getElementById('admin-password').value,
+        plan: selectedPlan,
+        amount: selectedAmount,
+      };
+
+      try {
+        const res = await fetch('/api/onboarding/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Registration failed');
+
+        if (data.checkoutUrl) {
+          // Redirect to Stripe checkout first, then app
+          window.location.href = data.checkoutUrl;
+        } else {
+          // Free plan — go straight to app
+          localStorage.setItem('sv_token', data.token);
+          localStorage.setItem('sv_user', JSON.stringify(data.user));
+          window.location.href = '/';
+        }
+      } catch (err) {
+        errDiv.textContent = err.message;
+        errDiv.classList.remove('hidden');
+        btn.disabled = false;
+        btn.textContent = 'Create Our Church Account →';
+      }
+    }
+
+    // Smooth scroll
+    document.querySelectorAll('a[href^="#"]').forEach(a => {
+      a.addEventListener('click', e => {
+        const id = a.getAttribute('href').split('?')[0];
+        const el = document.querySelector(id);
+        if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+      });
+    });
+  </script>
+</body>
+</html>

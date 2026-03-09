@@ -23,7 +23,7 @@ export default function Layout({ user, onLogout, children }) {
             <div className="flex items-center space-x-3">
               <span className="text-2xl">⛪</span>
               <div>
-                <h1 className="text-lg font-bold">HRCOC Finance</h1>
+                <h1 className="text-lg font-bold">StewardView</h1>
                 <p className="text-blue-200 text-xs">Transparency System</p>
               </div>
             </div>

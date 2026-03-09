@@ -35,8 +35,8 @@ export default function LoginPage({ onLogin }) {
       <div className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md">
         <div className="text-center mb-6">
           <span className="text-5xl">⛪</span>
-          <h1 className="text-2xl font-bold text-gray-900 mt-3">HRCOC Finance</h1>
-          <p className="text-gray-500 text-sm mt-1">Church Finance Transparency System</p>
+          <h1 className="text-2xl font-bold text-gray-900 mt-3">StewardView</h1>
+          <p className="text-gray-500 text-sm mt-1">Church Finance Transparency Platform</p>
         </div>
 
         {/* Toggle Login / Sign Up */}
@@ -72,7 +72,7 @@ export default function LoginPage({ onLogin }) {
             <input
               type="email" className="input" value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@hrcoc.org" required
+              placeholder="you@church.org" required
             />
           </div>
 
@@ -99,10 +99,10 @@ export default function LoginPage({ onLogin }) {
         {mode === 'login' && (
           <div className="mt-6 p-3 bg-gray-50 rounded-lg text-xs text-gray-500">
             <p className="font-medium text-gray-700 mb-1">Demo Credentials:</p>
-            <p>Admin: admin@hrcoc.org / changeme123</p>
-            <p>Admin: treasurer@hrcoc.org / changeme123</p>
-            <p>Elder: elder@hrcoc.org / changeme123</p>
-            <p>Viewer: viewer@hrcoc.org / changeme123</p>
+            <p>Admin: admin@demo.church / changeme123</p>
+            <p>Admin: treasurer@demo.church / changeme123</p>
+            <p>Elder: elder@demo.church / changeme123</p>
+            <p>Viewer: viewer@demo.church / changeme123</p>
           </div>
         )}
       </div>

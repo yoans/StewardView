@@ -1,16 +1,18 @@
 const router = require('express').Router();
 const db = require('../models/db');
 const { authenticate, authorize } = require('../middleware/auth');
+const { requireTenant } = require('../middleware/tenant');
 const { logAudit } = require('../models/auditLog');
 
 // GET /api/budgets?year=2026
-router.get('/', authenticate, async (req, res) => {
+router.get('/', authenticate, requireTenant, async (req, res) => {
   try {
     const year = parseInt(req.query.year) || new Date().getFullYear();
 
     const budgets = await db('budgets')
       .leftJoin('categories', 'budgets.category_id', 'categories.id')
       .where('budgets.year', year)
+      .where('budgets.tenant_id', req.tenantId)
       .select('budgets.*', 'categories.name as category_name', 'categories.type as category_type')
       .orderBy(['budgets.month', 'categories.type', 'categories.name']);
 
@@ -22,7 +24,7 @@ router.get('/', authenticate, async (req, res) => {
 });
 
 // GET /api/budgets/vs-actual?year=2026&month=3
-router.get('/vs-actual', authenticate, async (req, res) => {
+router.get('/vs-actual', authenticate, requireTenant, async (req, res) => {
   try {
     const year = parseInt(req.query.year) || new Date().getFullYear();
     const month = parseInt(req.query.month) || new Date().getMonth() + 1;
@@ -33,12 +35,13 @@ router.get('/vs-actual', authenticate, async (req, res) => {
     // Get budgets for the month
     const budgets = await db('budgets')
       .leftJoin('categories', 'budgets.category_id', 'categories.id')
-      .where({ 'budgets.year': year, 'budgets.month': month })
+      .where({ 'budgets.year': year, 'budgets.month': month, 'budgets.tenant_id': req.tenantId })
       .select('budgets.*', 'categories.name as category_name', 'categories.type as category_type');
 
     // Get actuals by category
     const actuals = await db('transactions')
       .where('status', '!=', 'void')
+      .where('tenant_id', req.tenantId)
       .whereBetween('date', [startDate, endDate])
       .groupBy('category_id')
       .select('category_id')
@@ -83,11 +86,11 @@ router.get('/vs-actual', authenticate, async (req, res) => {
 });
 
 // POST /api/budgets — create or update budget line
-router.post('/', authenticate, authorize('admin', 'treasurer'), async (req, res) => {
+router.post('/', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
   try {
     const { year, month, category_id, budgeted_amount, notes } = req.body;
 
-    const existing = await db('budgets').where({ year, month, category_id }).first();
+    const existing = await db('budgets').where({ year, month, category_id, tenant_id: req.tenantId }).first();
 
     if (existing) {
       await db('budgets').where({ id: existing.id }).update({ budgeted_amount, notes, updated_at: new Date().toISOString() });
@@ -101,7 +104,7 @@ router.post('/', authenticate, authorize('admin', 'treasurer'), async (req, res)
       return res.json(updated);
     }
 
-    const [id] = await db('budgets').insert({ year, month, category_id, budgeted_amount, notes, created_by: req.user.id });
+    const [id] = await db('budgets').insert({ year, month, category_id, budgeted_amount, notes, created_by: req.user.id, tenant_id: req.tenantId });
     await logAudit({
       entityType: 'budget', entityId: id, action: 'create',
       newValues: { year, month, category_id, budgeted_amount },
@@ -117,9 +120,9 @@ router.post('/', authenticate, authorize('admin', 'treasurer'), async (req, res)
 });
 
 // PUT /api/budgets/:id — edit a specific budget line
-router.put('/:id', authenticate, authorize('admin', 'treasurer'), async (req, res) => {
+router.put('/:id', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
   try {
-    const existing = await db('budgets').where({ id: req.params.id }).first();
+    const existing = await db('budgets').where({ id: req.params.id, tenant_id: req.tenantId }).first();
     if (!existing) return res.status(404).json({ error: 'Budget entry not found' });
 
     const updates = {};
@@ -151,9 +154,9 @@ router.put('/:id', authenticate, authorize('admin', 'treasurer'), async (req, re
 });
 
 // DELETE /api/budgets/:id — delete a budget line
-router.delete('/:id', authenticate, authorize('admin', 'treasurer'), async (req, res) => {
+router.delete('/:id', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
   try {
-    const existing = await db('budgets').where({ id: req.params.id }).first();
+    const existing = await db('budgets').where({ id: req.params.id, tenant_id: req.tenantId }).first();
     if (!existing) return res.status(404).json({ error: 'Budget entry not found' });
 
     await db('budgets').where({ id: req.params.id }).del();
@@ -172,20 +175,20 @@ router.delete('/:id', authenticate, authorize('admin', 'treasurer'), async (req,
 });
 
 // POST /api/budgets/copy — copy budget from one month/year to another
-router.post('/copy', authenticate, authorize('admin', 'treasurer'), async (req, res) => {
+router.post('/copy', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
   try {
     const { from_year, from_month, to_year, to_month } = req.body;
 
-    const sourceBudgets = await db('budgets').where({ year: from_year, month: from_month });
+    const sourceBudgets = await db('budgets').where({ year: from_year, month: from_month, tenant_id: req.tenantId });
     if (sourceBudgets.length === 0) return res.status(404).json({ error: 'No budget found for source period' });
 
-    // Delete existing target budgets
-    await db('budgets').where({ year: to_year, month: to_month }).del();
+    // Delete existing target budgets for this tenant
+    await db('budgets').where({ year: to_year, month: to_month, tenant_id: req.tenantId }).del();
 
     const newBudgets = sourceBudgets.map(b => ({
       year: to_year, month: to_month, category_id: b.category_id,
       budgeted_amount: b.budgeted_amount, notes: `Copied from ${from_year}-${from_month}`,
-      created_by: req.user.id,
+      created_by: req.user.id, tenant_id: req.tenantId,
     }));
 
     await db('budgets').insert(newBudgets);
@@ -204,7 +207,7 @@ router.post('/copy', authenticate, authorize('admin', 'treasurer'), async (req, 
 });
 
 // GET /api/budgets/ytd?year=2026
-router.get('/ytd', authenticate, async (req, res) => {
+router.get('/ytd', authenticate, requireTenant, async (req, res) => {
   try {
     const year = parseInt(req.query.year) || new Date().getFullYear();
     const currentMonth = new Date().getMonth() + 1;
@@ -217,6 +220,7 @@ router.get('/ytd', authenticate, async (req, res) => {
       .leftJoin('categories', 'budgets.category_id', 'categories.id')
       .where('budgets.year', year)
       .where('budgets.month', '<=', currentMonth)
+      .where('budgets.tenant_id', req.tenantId)
       .groupBy('budgets.category_id', 'categories.name', 'categories.type')
       .select('budgets.category_id', 'categories.name as category_name', 'categories.type as category_type')
       .sum('budgets.budgeted_amount as ytd_budgeted');
@@ -224,6 +228,7 @@ router.get('/ytd', authenticate, async (req, res) => {
     // YTD actuals
     const ytdActuals = await db('transactions')
       .where('status', '!=', 'void')
+      .where('tenant_id', req.tenantId)
       .whereBetween('date', [startDate, endDate])
       .groupBy('category_id')
       .select('category_id')

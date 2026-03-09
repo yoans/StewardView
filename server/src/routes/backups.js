@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const db = require('../models/db');
 const { authenticate, authorize } = require('../middleware/auth');
+const { requireTenant } = require('../middleware/tenant');
 const { logAudit } = require('../models/auditLog');
 
 const BACKUP_TABLES = [
@@ -10,9 +11,9 @@ const BACKUP_TABLES = [
 ];
 
 // GET /api/backups — list all backups
-router.get('/', authenticate, authorize('admin'), async (req, res) => {
+router.get('/', authenticate, requireTenant, authorize('admin'), async (req, res) => {
   try {
-    const backups = await db('data_backups').orderBy('created_at', 'desc').limit(50);
+    const backups = await db('data_backups').where({ tenant_id: req.tenantId }).orderBy('created_at', 'desc').limit(50);
     // Don't send full backup data in list view
     const list = backups.map(b => ({
       ...b,
@@ -27,7 +28,7 @@ router.get('/', authenticate, authorize('admin'), async (req, res) => {
 });
 
 // POST /api/backups — create a manual backup
-router.post('/', authenticate, authorize('admin'), async (req, res) => {
+router.post('/', authenticate, requireTenant, authorize('admin'), async (req, res) => {
   try {
     const backupData = {};
     let totalRows = 0;
@@ -37,7 +38,7 @@ router.post('/', authenticate, authorize('admin'), async (req, res) => {
       try {
         const hasTable = await db.schema.hasTable(table);
         if (!hasTable) continue;
-        const rows = await db(table).select('*');
+        const rows = await db(table).where({ tenant_id: req.tenantId }).select('*');
         backupData[table] = rows;
         totalRows += rows.length;
         tablesBackedUp.push(table);
@@ -51,6 +52,7 @@ router.post('/', authenticate, authorize('admin'), async (req, res) => {
       row_count: totalRows,
       backup_data: JSON.stringify(backupData),
       created_by: req.user.id,
+      tenant_id: req.tenantId,
     });
 
     await logAudit({
@@ -75,6 +77,7 @@ router.post('/', authenticate, authorize('admin'), async (req, res) => {
         status: 'failed',
         error_message: err.message,
         created_by: req.user.id,
+        tenant_id: req.tenantId,
       });
     } catch { /* ignore */ }
 
@@ -83,14 +86,14 @@ router.post('/', authenticate, authorize('admin'), async (req, res) => {
 });
 
 // GET /api/backups/:id/download — download a backup as JSON
-router.get('/:id/download', authenticate, authorize('admin'), async (req, res) => {
+router.get('/:id/download', authenticate, requireTenant, authorize('admin'), async (req, res) => {
   try {
-    const backup = await db('data_backups').where({ id: req.params.id }).first();
+    const backup = await db('data_backups').where({ id: req.params.id, tenant_id: req.tenantId }).first();
     if (!backup) return res.status(404).json({ error: 'Backup not found' });
     if (!backup.backup_data) return res.status(404).json({ error: 'No backup data available' });
 
     res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Content-Disposition', `attachment; filename=hrcoc-backup-${backup.id}-${new Date(backup.created_at).toISOString().slice(0, 10)}.json`);
+    res.setHeader('Content-Disposition', `attachment; filename=stewardview-backup-${backup.id}-${new Date(backup.created_at).toISOString().slice(0, 10)}.json`);
     res.send(backup.backup_data);
   } catch (err) {
     console.error('Download backup error:', err);
@@ -99,9 +102,9 @@ router.get('/:id/download', authenticate, authorize('admin'), async (req, res) =
 });
 
 // DELETE /api/backups/:id — delete old backup (keep audit trail)
-router.delete('/:id', authenticate, authorize('admin'), async (req, res) => {
+router.delete('/:id', authenticate, requireTenant, authorize('admin'), async (req, res) => {
   try {
-    const backup = await db('data_backups').where({ id: req.params.id }).first();
+    const backup = await db('data_backups').where({ id: req.params.id, tenant_id: req.tenantId }).first();
     if (!backup) return res.status(404).json({ error: 'Backup not found' });
 
     await db('data_backups').where({ id: req.params.id }).update({

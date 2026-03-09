@@ -3,15 +3,18 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../models/db');
 const { authenticate, authorize } = require('../middleware/auth');
+const { requireTenant } = require('../middleware/tenant');
 const { logAudit } = require('../models/auditLog');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h';
 const MIN_ADMINS = 2;
 
-// ── Helper: count active admins ─────────────────────────
-async function countActiveAdmins() {
-  const result = await db('users').where({ role: 'admin', is_active: true }).count('* as count').first();
+// ── Helper: count active admins within a tenant ──────────
+async function countActiveAdmins(tenantId) {
+  const query = db('users').where({ role: 'admin', is_active: true });
+  if (tenantId) query.where({ tenant_id: tenantId });
+  const result = await query.count('* as count').first();
   return parseInt(result.count) || 0;
 }
 
@@ -27,7 +30,11 @@ router.post('/login', async (req, res) => {
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
 
-    const payload = { id: user.id, email: user.email, name: user.name, role: user.role };
+    const payload = {
+      id: user.id, email: user.email, name: user.name, role: user.role,
+      tenant_id: user.tenant_id || null,
+      is_platform_admin: user.is_platform_admin || false,
+    };
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 
     await logAudit({
@@ -58,17 +65,21 @@ router.post('/signup', async (req, res) => {
     if (existing) return res.status(409).json({ error: 'Email already registered' });
 
     const hash = await bcrypt.hash(password, 10);
+    // For self-registration within an existing tenant, tenant_id can be passed in the request.
+    // This is used by admins inviting new users to their tenant.
+    const tenantId = req.body.tenant_id || null;
     const [id] = await db('users').insert({
       email, password_hash: hash, name, role: 'viewer', is_active: true,
+      tenant_id: tenantId,
     });
 
     await logAudit({
       entityType: 'user', entityId: id, action: 'signup',
-      newValues: { email, name, role: 'viewer' },
+      newValues: { email, name, role: 'viewer', tenant_id: tenantId },
       ipAddress: req.ip,
     });
 
-    const payload = { id, email, name, role: 'viewer' };
+    const payload = { id, email, name, role: 'viewer', tenant_id: tenantId };
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 
     res.status(201).json({ token, user: payload });
@@ -80,12 +91,17 @@ router.post('/signup', async (req, res) => {
 
 // GET /api/auth/me
 router.get('/me', authenticate, async (req, res) => {
-  const user = await db('users').where({ id: req.user.id }).select('id', 'email', 'name', 'role').first();
-  res.json(user);
+  const user = await db('users').where({ id: req.user.id }).select('id', 'email', 'name', 'role', 'tenant_id').first();
+  let tenant = null;
+  if (user?.tenant_id) {
+    tenant = await db('tenants').where({ id: user.tenant_id })
+      .select('id', 'name', 'slug', 'status', 'plan', 'primary_color', 'accent_color', 'logo_url').first();
+  }
+  res.json({ ...user, tenant });
 });
 
-// POST /api/auth/users  (admin/treasurer only — create user with any role)
-router.post('/users', authenticate, authorize('admin', 'treasurer'), async (req, res) => {
+// POST /api/auth/users  (admin/treasurer only — create user with any role, scoped to same tenant)
+router.post('/users', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
   try {
     const { email, password, name, role } = req.body;
     if (!email || !password || !name) {
@@ -96,11 +112,14 @@ router.post('/users', authenticate, authorize('admin', 'treasurer'), async (req,
     if (existing) return res.status(409).json({ error: 'Email already registered' });
 
     const hash = await bcrypt.hash(password, 10);
-    const [id] = await db('users').insert({ email, password_hash: hash, name, role: role || 'viewer' });
+    const [id] = await db('users').insert({
+      email, password_hash: hash, name, role: role || 'viewer',
+      tenant_id: req.tenantId,
+    });
 
     await logAudit({
       entityType: 'user', entityId: id, action: 'create',
-      newValues: { email, name, role },
+      newValues: { email, name, role, tenant_id: req.tenantId },
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
     });
 
@@ -111,9 +130,11 @@ router.post('/users', authenticate, authorize('admin', 'treasurer'), async (req,
   }
 });
 
-// GET /api/auth/users
-router.get('/users', authenticate, authorize('admin', 'treasurer'), async (req, res) => {
-  const users = await db('users').select('id', 'email', 'name', 'role', 'is_active', 'created_at');
+// GET /api/auth/users — scoped to same tenant
+router.get('/users', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
+  const users = await db('users')
+    .where({ tenant_id: req.tenantId })
+    .select('id', 'email', 'name', 'role', 'is_active', 'created_at');
   res.json(users);
 });
 
@@ -130,7 +151,7 @@ router.put('/users/:id', authenticate, authorize('admin'), async (req, res) => {
 
     // Enforce minimum 2 admins rule
     if (target.role === 'admin' && (updates.role && updates.role !== 'admin' || updates.is_active === false)) {
-      const adminCount = await countActiveAdmins();
+      const adminCount = await countActiveAdmins(req.user.tenant_id);
       if (adminCount <= MIN_ADMINS) {
         return res.status(400).json({
           error: `Cannot remove admin role. System requires at least ${MIN_ADMINS} active admins. Current: ${adminCount}.`,
@@ -169,7 +190,7 @@ router.delete('/users/:id', authenticate, authorize('admin'), async (req, res) =
 
     // Enforce minimum 2 admins rule
     if (target.role === 'admin') {
-      const adminCount = await countActiveAdmins();
+      const adminCount = await countActiveAdmins(req.user.tenant_id);
       if (adminCount <= MIN_ADMINS) {
         return res.status(400).json({
           error: `Cannot deactivate admin. System requires at least ${MIN_ADMINS} active admins.`,

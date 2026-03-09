@@ -4,7 +4,7 @@ A comprehensive church finance management application providing full transparenc
 
 ## Features
 
-- **Bank Balance Tracking** — Real-time bank balance via Plaid (Bank of America connected)
+- **Bank Balance Tracking** — Connect any bank via Plaid (12,000+ institutions supported) or add accounts manually
 - **Income & Expense Tracking** — Every transaction recorded with categories and descriptions
 - **Earmarked / Directed Contributions** — Track funds designated for specific purposes (missions, building fund, benevolence, etc.)
 - **Audit Trail** — Every change is logged with who, what, when, and why
@@ -19,7 +19,7 @@ A comprehensive church finance management application providing full transparenc
 | Frontend  | React 18 + Tailwind CSS           |
 | Backend   | Node.js + Express                 |
 | Database  | SQLite (dev) / PostgreSQL (prod)  |
-| Banking   | Plaid API (Bank of America)       |
+| Banking   | Plaid API (any bank or credit union)  |
 | Reports   | PDFKit                            |
 | Auth      | JWT + bcrypt                      |
 
@@ -54,16 +54,23 @@ The app will be available at:
 | `PLAID_CLIENT_ID` | Plaid API client ID |
 | `PLAID_SECRET` | Plaid API secret |
 | `PLAID_ENV` | Plaid environment (sandbox/development/production) |
-| `BOA_ACCESS_TOKEN` | Plaid access token for Bank of America account |
+| `PLAID_CLIENT_ID` | Plaid API client ID (from plaid.com) |
+| `PLAID_SECRET` | Plaid API secret |
+| `PLAID_ENV` | `sandbox` for testing, `production` for live |
+| `ORG_NAME` | Your church name (shown in Plaid Link UI) |
 
-## Bank of America Integration
+## Bank Integration (Any Bank via Plaid)
 
-This system uses **Plaid** to securely connect to Bank of America. Plaid is the industry-standard service used by major financial apps. To set up:
+This system uses **Plaid** to securely connect to any bank or credit union — over **12,000 institutions** are supported. You're not locked into any specific bank. To set up:
 
 1. Create a free account at [plaid.com](https://plaid.com)
 2. Get your `client_id` and `secret` from the Plaid dashboard
-3. Use the Plaid Link flow in the app to connect your Bank of America account
-4. The system will then pull balances and transactions automatically
+3. Set `PLAID_CLIENT_ID`, `PLAID_SECRET`, and `ORG_NAME` in `server/.env`
+4. Go to the **Bank Accounts** page in the app and click **"Connect a Bank Account"**
+5. The Plaid Link UI will appear — search for and log in to any bank your church uses
+6. The system will pull live balances and transactions automatically
+
+**No Plaid? No problem.** You can also add accounts manually (enter balances yourself) from the same Bank Accounts page. Manual and Plaid-linked accounts can coexist.
 
 ## Monthly Reports
 

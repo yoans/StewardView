@@ -9,19 +9,24 @@ const api = axios.create({
 
 // Attach JWT token to every request
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('hrcoc_token');
+  const token = localStorage.getItem('sv_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-// Handle 401 responses
+// Handle 401 / 402 responses
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('hrcoc_token');
-      localStorage.removeItem('hrcoc_user');
+      localStorage.removeItem('sv_token');
+      localStorage.removeItem('sv_user');
       window.location.href = '/login';
+    }
+    if (error.response?.status === 402) {
+      // Subscription suspended or cancelled — redirect to a suspension notice
+      const reason = error.response.data?.reason || 'subscription_suspended';
+      window.location.href = `/suspended?reason=${reason}`;
     }
     return Promise.reject(error);
   }
@@ -77,7 +82,11 @@ export const bankAPI = {
   linkToken: () => api.post('/bank/link-token'),
   exchangeToken: (data) => api.post('/bank/exchange-token', data),
   sync: () => api.post('/bank/sync'),
+  syncAccount: (id) => api.post(`/bank/sync/${id}`),
   syncLog: () => api.get('/bank/sync-log'),
+  createAccount: (data) => api.post('/bank/accounts', data),
+  updateAccount: (id, data) => api.put(`/bank/accounts/${id}`, data),
+  deactivateAccount: (id) => api.delete(`/bank/accounts/${id}`),
 };
 
 // ── Reports ──────────────────────────────────────────────
@@ -116,6 +125,23 @@ export const backupsAPI = {
   create: (type) => api.post('/backups', { type }),
   download: (id) => api.get(`/backups/${id}/download`, { responseType: 'blob' }),
   delete: (id) => api.delete(`/backups/${id}`),
+};
+
+// ── Platform Admin ───────────────────────────────────────
+export const platformAPI = {
+  stats: () => api.get('/platform/stats'),
+  tenants: () => api.get('/platform/tenants'),
+  getTenant: (id) => api.get(`/platform/tenants/${id}`),
+  updateTenant: (id, data) => api.put(`/platform/tenants/${id}`, data),
+  suspend: (id, reason) => api.post(`/platform/tenants/${id}/suspend`, { reason }),
+  reactivate: (id) => api.post(`/platform/tenants/${id}/reactivate`),
+};
+
+// ── Onboarding ───────────────────────────────────────────
+export const onboardingAPI = {
+  register: (data) => api.post('/onboarding/register', data),
+  tenantInfo: (slug) => api.get(`/onboarding/tenant-info/${slug}`),
+  confirmPayment: (sessionId) => api.post('/onboarding/payment-success', { session_id: sessionId }),
 };
 
 export default api;

@@ -1,10 +1,11 @@
 const router = require('express').Router();
 const db = require('../models/db');
 const { authenticate } = require('../middleware/auth');
+const { requireTenant } = require('../middleware/tenant');
 const { getAuditLog } = require('../models/auditLog');
 
 // GET /api/audit — full audit log with optional filters
-router.get('/', authenticate, async (req, res) => {
+router.get('/', authenticate, requireTenant, async (req, res) => {
   try {
     const { entity_type, user_id, start_date, end_date, limit = 100, offset = 0 } = req.query;
 
@@ -15,6 +16,7 @@ router.get('/', authenticate, async (req, res) => {
       endDate: end_date,
       limit: parseInt(limit),
       offset: parseInt(offset),
+      tenantId: req.tenantId,
     });
 
     // Parse JSON fields for display

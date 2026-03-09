@@ -103,7 +103,7 @@ export default function AdminPage({ user }) {
       const url = window.URL.createObjectURL(new Blob([res.data]));
       const a = document.createElement('a');
       a.href = url;
-      a.download = `hrcoc-backup-${id}.json`;
+      a.download = `stewardview-backup-${id}.json`;
       a.click();
       window.URL.revokeObjectURL(url);
     } catch {

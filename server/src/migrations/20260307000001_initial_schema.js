@@ -17,8 +17,9 @@ exports.up = function (knex) {
     // ── Bank Accounts ───────────────────────────────────────
     .createTable('bank_accounts', (t) => {
       t.increments('id').primary();
-      t.string('name').notNullable(); // e.g. "BOA Checking"
-      t.string('institution').notNullable(); // e.g. "Bank of America"
+      t.string('name').notNullable(); // e.g. "First National Checking"
+      t.string('institution').notNullable(); // e.g. "First National Bank"
+      t.string('account_type').defaultTo('checking'); // checking, savings, investment, cash
       t.string('account_mask'); // last 4 digits
       t.string('plaid_account_id'); // Plaid account id
       t.string('plaid_access_token'); // encrypted Plaid access token

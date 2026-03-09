@@ -1,7 +1,7 @@
 {
-  "name": "hrcoc-finance",
+  "name": "stewardview",
   "version": "1.0.0",
-  "description": "HRCOC Church Finance Transparency & Management System",
+  "description": "StewardView — Church Finance Transparency & Management Platform",
   "private": true,
   "engines": {
     "node": ">=18.0.0"

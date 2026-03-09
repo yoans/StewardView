@@ -2,6 +2,7 @@ const router = require('express').Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../models/db');
 const { authenticate, authorize } = require('../middleware/auth');
+const { requireTenant } = require('../middleware/tenant');
 const { logAudit } = require('../models/auditLog');
 
 // ── Givelify Envelope → Fund mapping rules ──────────────
@@ -20,29 +21,30 @@ const DEFAULT_ENVELOPE_MAP = {
   'youth ministry': 'Youth Fund',
 };
 
-async function getEnvelopeMap() {
+async function getEnvelopeMap(tenantId) {
   try {
-    const setting = await db('app_settings').where({ key: 'givelify_envelope_map' }).first();
+    const setting = await db('app_settings').where({ key: 'givelify_envelope_map', tenant_id: tenantId }).first();
     if (setting && setting.value) return JSON.parse(setting.value);
   } catch { /* ignore */ }
   return DEFAULT_ENVELOPE_MAP;
 }
 
-async function mapEnvelopeToFund(envelope) {
-  const map = await getEnvelopeMap();
+async function mapEnvelopeToFund(envelope, tenantId) {
+  const map = await getEnvelopeMap(tenantId);
   const normalized = (envelope || '').toLowerCase().trim();
   const fundName = map[normalized];
   if (!fundName) return null;
-  return db('funds').where({ name: fundName, is_active: true }).first();
+  return db('funds').where({ name: fundName, is_active: true, tenant_id: tenantId }).first();
 }
 
 // GET /api/givelify — list imported contributions
-router.get('/', authenticate, async (req, res) => {
+router.get('/', authenticate, requireTenant, async (req, res) => {
   try {
     const { status, start_date, end_date, limit = 100, offset = 0 } = req.query;
     let query = db('givelify_contributions')
       .leftJoin('funds', 'givelify_contributions.fund_id', 'funds.id')
       .select('givelify_contributions.*', 'funds.name as fund_name')
+      .where('givelify_contributions.tenant_id', req.tenantId)
       .orderBy('givelify_contributions.date', 'desc')
       .limit(parseInt(limit))
       .offset(parseInt(offset));
@@ -58,18 +60,19 @@ router.get('/', authenticate, async (req, res) => {
 });
 
 // GET /api/givelify/summary — dashboard stats
-router.get('/summary', authenticate, async (req, res) => {
+router.get('/summary', authenticate, requireTenant, async (req, res) => {
   try {
     const thisMonth = new Date().toISOString().slice(0, 7);
     const startDate = `${thisMonth}-01`;
     const total = await db('givelify_contributions')
-      .where('status', '!=', 'void')
+      .where('status', '!=', 'void').where('tenant_id', req.tenantId)
       .sum('amount as total').first();
     const monthTotal = await db('givelify_contributions')
-      .where('status', '!=', 'void')
+      .where('status', '!=', 'void').where('tenant_id', req.tenantId)
       .where('date', '>=', startDate)
       .sum('amount as total').first();
-    const pending = await db('givelify_contributions').where({ status: 'pending' }).count('* as count').first();
+    const pending = await db('givelify_contributions')
+      .where({ status: 'pending', tenant_id: req.tenantId }).count('* as count').first();
     res.json({
       total_all_time: parseFloat(total.total) || 0,
       total_this_month: parseFloat(monthTotal.total) || 0,
@@ -82,7 +85,7 @@ router.get('/summary', authenticate, async (req, res) => {
 });
 
 // POST /api/givelify/import — import from CSV data (array of objects)
-router.post('/import', authenticate, authorize('admin', 'treasurer'), async (req, res) => {
+router.post('/import', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
   try {
     const { contributions } = req.body; // array of { donor_name, donor_email, amount, date, envelope, givelify_id }
     if (!Array.isArray(contributions) || contributions.length === 0) {
@@ -95,12 +98,12 @@ router.post('/import', authenticate, authorize('admin', 'treasurer'), async (req
       try {
         // Skip duplicates
         if (c.givelify_id) {
-          const existing = await db('givelify_contributions').where({ givelify_id: c.givelify_id }).first();
+          const existing = await db('givelify_contributions').where({ givelify_id: c.givelify_id, tenant_id: req.tenantId }).first();
           if (existing) { results.skipped++; continue; }
         }
 
         // Auto-map envelope to fund
-        const fund = await mapEnvelopeToFund(c.envelope);
+        const fund = await mapEnvelopeToFund(c.envelope, req.tenantId);
 
         const [gcId] = await db('givelify_contributions').insert({
           givelify_id: c.givelify_id || null,
@@ -113,18 +116,18 @@ router.post('/import', authenticate, authorize('admin', 'treasurer'), async (req
           fund_id: fund ? fund.id : null,
           status: 'pending',
           raw_data: JSON.stringify(c),
+          tenant_id: req.tenantId,
         });
 
         // Auto-create transaction and earmark to fund
         if (fund) {
           const ref_number = uuidv4();
-          // Get the 'Directed Contributions' or 'Tithes' category based on fund
           let categoryId = null;
           if (fund.name === 'General Fund') {
-            const cat = await db('categories').where({ name: 'Tithes & Offerings', type: 'income' }).first();
+            const cat = await db('categories').where({ name: 'Tithes & Offerings', type: 'income', tenant_id: req.tenantId }).first();
             categoryId = cat ? cat.id : null;
           } else {
-            const cat = await db('categories').where({ name: 'Directed Contributions', type: 'income' }).first();
+            const cat = await db('categories').where({ name: 'Directed Contributions', type: 'income', tenant_id: req.tenantId }).first();
             categoryId = cat ? cat.id : null;
           }
 
@@ -141,6 +144,7 @@ router.post('/import', authenticate, authorize('admin', 'treasurer'), async (req
             status: 'cleared',
             notes: `Auto-imported from Givelify. ID: ${c.givelify_id || 'N/A'}`,
             created_by: req.user.id,
+            tenant_id: req.tenantId,
           });
 
           // Create fund transaction
@@ -153,10 +157,11 @@ router.post('/import', authenticate, authorize('admin', 'treasurer'), async (req
             description: `Givelify: ${c.envelope || 'General'}`,
             donor_name: c.donor_name || 'Givelify',
             created_by: req.user.id,
+            tenant_id: req.tenantId,
           });
 
           // Update fund balance
-          await db('funds').where({ id: fund.id }).increment('current_balance', parseFloat(c.amount));
+          await db('funds').where({ id: fund.id, tenant_id: req.tenantId }).increment('current_balance', parseFloat(c.amount));
 
           // Mark as imported
           await db('givelify_contributions').where({ id: gcId }).update({
@@ -188,23 +193,23 @@ router.post('/import', authenticate, authorize('admin', 'treasurer'), async (req
 });
 
 // POST /api/givelify/:id/earmark — manually earmark a pending Givelify contribution
-router.post('/:id/earmark', authenticate, authorize('admin', 'treasurer'), async (req, res) => {
+router.post('/:id/earmark', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
   try {
-    const gc = await db('givelify_contributions').where({ id: req.params.id }).first();
+    const gc = await db('givelify_contributions').where({ id: req.params.id, tenant_id: req.tenantId }).first();
     if (!gc) return res.status(404).json({ error: 'Contribution not found' });
     if (gc.status === 'imported') return res.status(400).json({ error: 'Already imported' });
 
     const { fund_id } = req.body;
-    const fund = await db('funds').where({ id: fund_id }).first();
+    const fund = await db('funds').where({ id: fund_id, tenant_id: req.tenantId }).first();
     if (!fund) return res.status(404).json({ error: 'Fund not found' });
 
     const ref_number = uuidv4();
     let categoryId = null;
     if (fund.name === 'General Fund') {
-      const cat = await db('categories').where({ name: 'Tithes & Offerings', type: 'income' }).first();
+      const cat = await db('categories').where({ name: 'Tithes & Offerings', type: 'income', tenant_id: req.tenantId }).first();
       categoryId = cat ? cat.id : null;
     } else {
-      const cat = await db('categories').where({ name: 'Directed Contributions', type: 'income' }).first();
+      const cat = await db('categories').where({ name: 'Directed Contributions', type: 'income', tenant_id: req.tenantId }).first();
       categoryId = cat ? cat.id : null;
     }
 
@@ -221,6 +226,7 @@ router.post('/:id/earmark', authenticate, authorize('admin', 'treasurer'), async
       status: 'cleared',
       notes: `Manually earmarked from Givelify. ID: ${gc.givelify_id || 'N/A'}`,
       created_by: req.user.id,
+      tenant_id: req.tenantId,
     });
 
     await db('fund_transactions').insert({
@@ -228,9 +234,10 @@ router.post('/:id/earmark', authenticate, authorize('admin', 'treasurer'), async
       type: 'contribution', amount: gc.amount, date: gc.date,
       description: `Givelify: ${gc.envelope || 'General'}`,
       donor_name: gc.donor_name, created_by: req.user.id,
+      tenant_id: req.tenantId,
     });
 
-    await db('funds').where({ id: fund.id }).increment('current_balance', parseFloat(gc.amount));
+    await db('funds').where({ id: fund.id, tenant_id: req.tenantId }).increment('current_balance', parseFloat(gc.amount));
 
     await db('givelify_contributions').where({ id: gc.id }).update({
       status: 'imported', transaction_id: txnId, fund_id: fund.id, fund_mapping: fund.name,
@@ -250,20 +257,20 @@ router.post('/:id/earmark', authenticate, authorize('admin', 'treasurer'), async
 });
 
 // GET /api/givelify/envelope-map — get current envelope→fund mapping
-router.get('/envelope-map', authenticate, async (req, res) => {
-  const map = await getEnvelopeMap();
+router.get('/envelope-map', authenticate, requireTenant, async (req, res) => {
+  const map = await getEnvelopeMap(req.tenantId);
   res.json(map);
 });
 
 // PUT /api/givelify/envelope-map — update envelope→fund mapping
-router.put('/envelope-map', authenticate, authorize('admin', 'treasurer'), async (req, res) => {
+router.put('/envelope-map', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
   try {
     const { map } = req.body;
-    const existing = await db('app_settings').where({ key: 'givelify_envelope_map' }).first();
+    const existing = await db('app_settings').where({ key: 'givelify_envelope_map', tenant_id: req.tenantId }).first();
     if (existing) {
-      await db('app_settings').where({ key: 'givelify_envelope_map' }).update({ value: JSON.stringify(map) });
+      await db('app_settings').where({ key: 'givelify_envelope_map', tenant_id: req.tenantId }).update({ value: JSON.stringify(map) });
     } else {
-      await db('app_settings').insert({ key: 'givelify_envelope_map', value: JSON.stringify(map) });
+      await db('app_settings').insert({ key: 'givelify_envelope_map', value: JSON.stringify(map), tenant_id: req.tenantId });
     }
     await logAudit({
       entityType: 'settings', entityId: 0, action: 'update',
