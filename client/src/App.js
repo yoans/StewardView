@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
@@ -12,7 +12,19 @@ import AuditPage from './pages/AuditPage';
 import GivelifyPage from './pages/GivelifyPage';
 import AdminPage from './pages/AdminPage';
 import PlatformAdminPage from './pages/PlatformAdminPage';
-import { authAPI } from './services/api';
+import { authAPI, onboardingAPI } from './services/api';
+
+function parseJwtPayload(token) {
+  const encodedPayload = token.split('.')[1];
+  if (!encodedPayload) throw new Error('Invalid login token.');
+
+  const normalized = encodedPayload
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+
+  return JSON.parse(atob(padded));
+}
 
 // ── Suspension screen ─────────────────────────────────────
 function SuspendedPage() {
@@ -35,6 +47,77 @@ function SuspendedPage() {
           className="inline-block bg-indigo-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-indigo-700 transition">
           Contact Support
         </a>
+      </div>
+    </div>
+  );
+}
+
+function PaymentSuccessPage({ onLogin }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [status, setStatus] = useState('confirming');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+
+    async function confirm() {
+      const params = new URLSearchParams(location.search);
+      const sessionId = params.get('session_id');
+      const token = params.get('token');
+
+      if (!sessionId || !token) {
+        if (!active) return;
+        setStatus('error');
+        setError('Missing checkout details. Please contact support if your payment was completed.');
+        return;
+      }
+
+      try {
+        const res = await onboardingAPI.confirmPayment(sessionId, token);
+        const confirmedToken = res.data?.token || token;
+
+        if (!confirmedToken) {
+          throw new Error('No login token returned after payment confirmation.');
+        }
+
+        const payload = parseJwtPayload(confirmedToken);
+        if (!active) return;
+
+        onLogin(payload, confirmedToken);
+        setStatus('done');
+        navigate('/', { replace: true });
+      } catch (err) {
+        if (!active) return;
+        setStatus('error');
+        setError(err.response?.data?.error || err.message || 'Payment confirmation failed.');
+      }
+    }
+
+    confirm();
+    return () => {
+      active = false;
+    };
+  }, [location.search, navigate, onLogin]);
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+      <div className="max-w-md w-full bg-white rounded-2xl shadow-lg p-8 text-center">
+        <h1 className="text-2xl font-bold text-gray-900 mb-3">Finalizing Your Account</h1>
+        {status === 'confirming' && (
+          <p className="text-gray-600">Confirming your subscription and signing you in...</p>
+        )}
+        {status === 'error' && (
+          <>
+            <p className="text-red-600 mb-4">{error}</p>
+            <a
+              href="mailto:support@stewardview.app"
+              className="inline-block bg-indigo-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-indigo-700 transition"
+            >
+              Contact Support
+            </a>
+          </>
+        )}
       </div>
     </div>
   );
@@ -90,9 +173,10 @@ function App() {
   if (loading) return <div className="flex items-center justify-center h-screen">Loading...</div>;
 
   return (
-    <Router>
+    <Router basename="/app">
       <Routes>
         <Route path="/suspended" element={<SuspendedPage />} />
+        <Route path="/payment-success" element={<PaymentSuccessPage onLogin={handleLogin} />} />
         <Route path="/login" element={
           user ? <Navigate to="/" /> : <LoginPage onLogin={handleLogin} />
         } />

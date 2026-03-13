@@ -21,12 +21,12 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('sv_token');
       localStorage.removeItem('sv_user');
-      window.location.href = '/login';
+      window.location.href = '/app/login';
     }
     if (error.response?.status === 402) {
       // Subscription suspended or cancelled — redirect to a suspension notice
       const reason = error.response.data?.reason || 'subscription_suspended';
-      window.location.href = `/suspended?reason=${reason}`;
+      window.location.href = `/app/suspended?reason=${reason}`;
     }
     return Promise.reject(error);
   }
@@ -141,7 +141,7 @@ export const platformAPI = {
 export const onboardingAPI = {
   register: (data) => api.post('/onboarding/register', data),
   tenantInfo: (slug) => api.get(`/onboarding/tenant-info/${slug}`),
-  confirmPayment: (sessionId) => api.post('/onboarding/payment-success', { session_id: sessionId }),
+  confirmPayment: (sessionId, token) => api.post('/onboarding/payment-success', { session_id: sessionId, token }),
 };
 
 export default api;

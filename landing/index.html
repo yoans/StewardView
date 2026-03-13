@@ -50,7 +50,7 @@
         <a href="#faq" class="hover:text-white transition-colors">FAQ</a>
       </div>
       <div class="flex items-center gap-3">
-        <a href="/login" class="text-sm text-white/80 hover:text-white transition-colors px-3 py-1.5">Sign In</a>
+        <a href="/app/login" class="text-sm text-white/80 hover:text-white transition-colors px-3 py-1.5">Sign In</a>
         <a href="#get-started" class="text-sm font-semibold bg-gold-400 hover:bg-gold-300 text-navy-950 px-4 py-2 rounded-lg transition-colors">Get Started Free</a>
       </div>
     </div>
@@ -561,7 +561,7 @@
         <h4 class="font-semibold mb-3 text-gray-300">Support</h4>
         <ul class="space-y-2 text-sm text-gray-500">
           <li><a href="mailto:hello@stewardview.app" class="hover:text-white transition-colors">Contact Us</a></li>
-          <li><a href="/login" class="hover:text-white transition-colors">Sign In</a></li>
+          <li><a href="/app/login" class="hover:text-white transition-colors">Sign In</a></li>
           <li><a href="#get-started" class="hover:text-white transition-colors">Get Started</a></li>
           <li><a href="#" class="hover:text-white transition-colors">Terms of Service</a></li>
         </ul>
@@ -644,7 +644,7 @@
           // Free plan — go straight to app
           localStorage.setItem('sv_token', data.token);
           localStorage.setItem('sv_user', JSON.stringify(data.user));
-          window.location.href = '/';
+          window.location.href = '/app/';
         }
       } catch (err) {
         errDiv.textContent = err.message;

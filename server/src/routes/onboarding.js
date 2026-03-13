@@ -117,7 +117,7 @@ router.post('/register', async (req, res) => {
               },
               quantity: 1,
             }],
-            success_url: `${appUrl}/payment-success?session_id={CHECKOUT_SESSION_ID}&token=${token}`,
+            success_url: `${appUrl}/app/payment-success?session_id={CHECKOUT_SESSION_ID}&token=${token}`,
             cancel_url: `${appUrl}/#get-started`,
             metadata: { tenant_id: String(tenantId), slug },
             allow_promotion_codes: true,

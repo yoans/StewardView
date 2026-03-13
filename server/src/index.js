@@ -73,6 +73,12 @@ if (fs.existsSync(landingPath)) {
   app.get('/', (req, res) => res.sendFile(path.join(landingPath, 'index.html')));
 }
 
+// Legacy app URLs now live under /app
+app.get(['/login', '/suspended', '/payment-success'], (req, res) => {
+  const query = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+  res.redirect(`/app${req.path}${query}`);
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '1.0.0' });
