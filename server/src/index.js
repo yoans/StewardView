@@ -185,7 +185,10 @@ async function initializeApp() {
   }
 
   if (!process.env.DATABASE_URL) {
-    throw new Error('DATABASE_URL is required in production. Attach Railway PostgreSQL or set the variable explicitly.');
+    // Keep the error message clear in logs but do not crash the process.
+    // The healthcheck will pass (HTTP 200 status:starting) so Railway won't
+    // kill the container; the operator can see this error and add DATABASE_URL.
+    throw new Error('DATABASE_URL is required in production. Attach a Railway PostgreSQL service or set the variable explicitly.');
   }
 
   const maxAttempts = parseInt(process.env.DB_STARTUP_MAX_ATTEMPTS || '10', 10);
@@ -213,6 +216,11 @@ async function initializeApp() {
 
 // ── Start ────────────────────────────────────────────────
 (async () => {
+  // Warn loudly if JWT_SECRET is the insecure default in production
+  if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'dev-secret')) {
+    console.error('SECURITY WARNING: JWT_SECRET is not set or is using the insecure default. Set a strong JWT_SECRET environment variable immediately.');
+  }
+
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`
   ╔══════════════════════════════════════════════╗
@@ -226,8 +234,10 @@ async function initializeApp() {
   try {
     await initializeApp();
   } catch (err) {
-    console.error('Startup error:', err);
-    server.close(() => process.exit(1));
+    // Log the error but keep the server alive so Railway's healthcheck can
+    // respond and the operator can diagnose the issue in logs.
+    // appReady remains false, so all API routes return 503 until fixed.
+    console.error('Startup error (server will stay up but API is unavailable):', err.message || err);
   }
 })();
 
