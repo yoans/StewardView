@@ -45,7 +45,7 @@ router.post('/', authenticate, requireTenant, authorize('admin'), async (req, re
       } catch { /* table may not exist yet */ }
     }
 
-    const [id] = await db('data_backups').insert({
+    const [{ id }] = await db('data_backups').insert({
       backup_type: req.body.type || 'manual',
       status: 'success',
       tables_included: JSON.stringify(tablesBackedUp),
@@ -53,7 +53,7 @@ router.post('/', authenticate, requireTenant, authorize('admin'), async (req, re
       backup_data: JSON.stringify(backupData),
       created_by: req.user.id,
       tenant_id: req.tenantId,
-    });
+    }).returning('id');
 
     await logAudit({
       entityType: 'backup', entityId: id, action: 'create',

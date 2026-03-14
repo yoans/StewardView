@@ -68,10 +68,10 @@ router.post('/signup', async (req, res) => {
     // For self-registration within an existing tenant, tenant_id can be passed in the request.
     // This is used by admins inviting new users to their tenant.
     const tenantId = req.body.tenant_id || null;
-    const [id] = await db('users').insert({
+    const [{ id }] = await db('users').insert({
       email, password_hash: hash, name, role: 'viewer', is_active: true,
       tenant_id: tenantId,
-    });
+    }).returning('id');
 
     await logAudit({
       entityType: 'user', entityId: id, action: 'signup',
@@ -112,10 +112,10 @@ router.post('/users', authenticate, requireTenant, authorize('admin', 'treasurer
     if (existing) return res.status(409).json({ error: 'Email already registered' });
 
     const hash = await bcrypt.hash(password, 10);
-    const [id] = await db('users').insert({
+    const [{ id }] = await db('users').insert({
       email, password_hash: hash, name, role: role || 'viewer',
       tenant_id: req.tenantId,
-    });
+    }).returning('id');
 
     await logAudit({
       entityType: 'user', entityId: id, action: 'create',

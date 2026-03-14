@@ -105,7 +105,7 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
         // Auto-map envelope to fund
         const fund = await mapEnvelopeToFund(c.envelope, req.tenantId);
 
-        const [gcId] = await db('givelify_contributions').insert({
+        const [{ id: gcId }] = await db('givelify_contributions').insert({
           givelify_id: c.givelify_id || null,
           donor_name: c.donor_name || 'Anonymous',
           donor_email: c.donor_email || null,
@@ -117,7 +117,7 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
           status: 'pending',
           raw_data: JSON.stringify(c),
           tenant_id: req.tenantId,
-        });
+        }).returning('id');
 
         // Auto-create transaction and earmark to fund
         if (fund) {
@@ -131,7 +131,7 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
             categoryId = cat ? cat.id : null;
           }
 
-          const [txnId] = await db('transactions').insert({
+          const [{ id: txnId }] = await db('transactions').insert({
             ref_number,
             type: 'income',
             amount: parseFloat(c.amount),
@@ -145,7 +145,7 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
             notes: `Auto-imported from Givelify. ID: ${c.givelify_id || 'N/A'}`,
             created_by: req.user.id,
             tenant_id: req.tenantId,
-          });
+          }).returning('id');
 
           // Create fund transaction
           await db('fund_transactions').insert({
@@ -213,7 +213,7 @@ router.post('/:id/earmark', authenticate, requireTenant, authorize('admin', 'tre
       categoryId = cat ? cat.id : null;
     }
 
-    const [txnId] = await db('transactions').insert({
+    const [{ id: txnId }] = await db('transactions').insert({
       ref_number,
       type: 'income',
       amount: gc.amount,
@@ -227,7 +227,7 @@ router.post('/:id/earmark', authenticate, requireTenant, authorize('admin', 'tre
       notes: `Manually earmarked from Givelify. ID: ${gc.givelify_id || 'N/A'}`,
       created_by: req.user.id,
       tenant_id: req.tenantId,
-    });
+    }).returning('id');
 
     await db('fund_transactions').insert({
       fund_id: fund.id, transaction_id: txnId,

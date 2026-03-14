@@ -72,14 +72,14 @@ router.post('/exchange-token', authenticate, requireTenant, authorize('admin', '
 
     // Save each linked account scoped to this tenant
     for (const account of accounts) {
-      const [id] = await db('bank_accounts').insert({
+      const [{ id }] = await db('bank_accounts').insert({
         name: `${institution.name} - ${account.name}`,
         institution: institution.name,
         account_mask: account.mask,
         plaid_account_id: account.id,
         plaid_access_token: accessToken,
         tenant_id: req.tenantId,
-      });
+      }).returning('id');
 
       await logAudit({
         entityType: 'bank_account', entityId: id, action: 'link',
@@ -219,7 +219,7 @@ router.post('/accounts', authenticate, requireTenant, authorize('admin', 'treasu
     const { name, institution, account_mask, current_balance, available_balance, account_type } = req.body;
     if (!name || !institution) return res.status(400).json({ error: 'name and institution are required' });
 
-    const [id] = await db('bank_accounts').insert({
+    const [{ id }] = await db('bank_accounts').insert({
       name,
       institution,
       account_mask: account_mask || null,
@@ -228,7 +228,7 @@ router.post('/accounts', authenticate, requireTenant, authorize('admin', 'treasu
       account_type: account_type || 'checking',
       balance_last_updated: new Date().toISOString(),
       tenant_id: req.tenantId,
-    });
+    }).returning('id');
 
     await logAudit({
       entityType: 'bank_account', entityId: id, action: 'create',

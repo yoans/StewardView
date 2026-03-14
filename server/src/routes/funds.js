@@ -27,10 +27,10 @@ router.get('/:id', authenticate, requireTenant, async (req, res) => {
 router.post('/', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
   try {
     const { name, description, target_amount, is_restricted } = req.body;
-    const [id] = await db('funds').insert({
+    const [{ id }] = await db('funds').insert({
       name, description, target_amount, is_restricted: is_restricted || false,
       current_balance: 0, tenant_id: req.tenantId,
-    });
+    }).returning('id');
 
     await logAudit({
       entityType: 'fund', entityId: id, action: 'create',

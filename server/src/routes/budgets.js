@@ -104,7 +104,7 @@ router.post('/', authenticate, requireTenant, authorize('admin', 'treasurer'), a
       return res.json(updated);
     }
 
-    const [id] = await db('budgets').insert({ year, month, category_id, budgeted_amount, notes, created_by: req.user.id, tenant_id: req.tenantId });
+    const [{ id }] = await db('budgets').insert({ year, month, category_id, budgeted_amount, notes, created_by: req.user.id, tenant_id: req.tenantId }).returning('id');
     await logAudit({
       entityType: 'budget', entityId: id, action: 'create',
       newValues: { year, month, category_id, budgeted_amount },

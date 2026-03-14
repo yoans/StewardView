@@ -53,25 +53,25 @@ router.post('/register', async (req, res) => {
     }
 
     // Create tenant
-    const [tenantId] = await db('tenants').insert({
+    const [{ id: tenantId }] = await db('tenants').insert({
       name: churchName,
       slug,
       status: 'active',
       plan: plan || 'free',
       plan_amount: parseFloat(amount) || 0,
       admin_email: adminEmail,
-    });
+    }).returning('id');
 
     // Create admin user
     const hash = await bcrypt.hash(adminPassword, 10);
-    const [userId] = await db('users').insert({
+    const [{ id: userId }] = await db('users').insert({
       email: adminEmail,
       password_hash: hash,
       name: adminName,
       role: 'admin',
       is_active: true,
       tenant_id: tenantId,
-    });
+    }).returning('id');
 
     // Seed default categories for this tenant
     await seedDefaultCategories(tenantId, userId);

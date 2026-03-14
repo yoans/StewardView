@@ -59,12 +59,12 @@ router.post('/', authenticate, requireTenant, authorize('admin', 'treasurer', 'f
     const { type, amount, date, description, payee_payer, check_number, category_id, bank_account_id, fund_id, notes } = req.body;
 
     const ref_number = uuidv4();
-    const [id] = await db('transactions').insert({
+    const [{ id }] = await db('transactions').insert({
       ref_number, type, amount, date, description, payee_payer,
       check_number, category_id, bank_account_id, fund_id,
       notes, status: 'pending', created_by: req.user.id,
       tenant_id: req.tenantId,
-    });
+    }).returning('id');
 
     // If directed to a fund, create fund transaction
     if (fund_id) {
