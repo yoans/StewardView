@@ -26,6 +26,7 @@ const onboardingRoutes = require('./routes/onboarding');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
+let appReady = false;
 
 // ── Middleware ────────────────────────────────────────────
 app.use(helmet({
@@ -53,6 +54,21 @@ const limiter = rateLimit({
 app.use('/api/', limiter);
 
 // ── API Routes ───────────────────────────────────────────
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: appReady ? 'ok' : 'starting',
+    timestamp: new Date().toISOString(),
+    version: '1.0.0',
+  });
+});
+
+app.use('/api', (req, res, next) => {
+  if (req.path === '/health') return next();
+  if (appReady) return next();
+  return res.status(503).json({ error: 'Server is still starting. Please try again shortly.' });
+});
+
 app.use('/api/auth', authRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/funds', fundRoutes);
@@ -77,11 +93,6 @@ if (fs.existsSync(landingPath)) {
 app.get(['/login', '/suspended', '/payment-success'], (req, res) => {
   const query = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
   res.redirect(`/app${req.path}${query}`);
-});
-
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '1.0.0' });
 });
 
 // ── Cron: Monthly report on 1st of each month at 6 AM ───
@@ -163,21 +174,46 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-// ── Start ────────────────────────────────────────────────
-(async () => {
-  // Run migrations on startup in production
-  if (process.env.NODE_ENV === 'production') {
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function initializeApp() {
+  if (process.env.NODE_ENV !== 'production') {
+    appReady = true;
+    return;
+  }
+
+  if (!process.env.DATABASE_URL) {
+    throw new Error('DATABASE_URL is required in production. Attach Railway PostgreSQL or set the variable explicitly.');
+  }
+
+  const maxAttempts = parseInt(process.env.DB_STARTUP_MAX_ATTEMPTS || '10', 10);
+  const retryDelayMs = parseInt(process.env.DB_STARTUP_RETRY_MS || '3000', 10);
+  let lastError;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      console.log('Running database migrations...');
+      console.log(`Running database migrations (attempt ${attempt}/${maxAttempts})...`);
       await db.migrate.latest();
       console.log('Migrations complete.');
+      appReady = true;
+      return;
     } catch (err) {
-      console.error('Migration error:', err);
-      process.exit(1);
+      lastError = err;
+      console.error(`Migration attempt ${attempt} failed:`, err.message || err);
+      if (attempt < maxAttempts) {
+        await sleep(retryDelayMs);
+      }
     }
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  throw lastError;
+}
+
+// ── Start ────────────────────────────────────────────────
+(async () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`
   ╔══════════════════════════════════════════════╗
   ║   StewardView Server                        ║
@@ -186,6 +222,13 @@ app.use((err, req, res, next) => {
   ╚══════════════════════════════════════════════╝
     `);
   });
+
+  try {
+    await initializeApp();
+  } catch (err) {
+    console.error('Startup error:', err);
+    server.close(() => process.exit(1));
+  }
 })();
 
 module.exports = app;
