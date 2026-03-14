@@ -1,8 +1,14 @@
 node_modules/
 .env
+.env.*
+!.env.example
+!server/.env.example
 reports/
 *.db
 *.sqlite
 *.sqlite3
 dist/
+client/build/
+coverage/
+*.log
 .DS_Store

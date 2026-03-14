@@ -16,7 +16,7 @@ StewardView is a multi-tenant church finance platform with a public marketing si
 |-----------|-----------------------------------|
 | Frontend  | React 18 + Tailwind CSS           |
 | Backend   | Node.js + Express                 |
-| Database  | SQLite (dev) / PostgreSQL (prod)  |
+| Database  | PostgreSQL                        |
 | Banking   | Plaid API (any bank or credit union)  |
 | Reports   | PDFKit                            |
 | Auth      | JWT + bcrypt                      |
@@ -29,7 +29,7 @@ npm run install:all
 
 # 2. Copy environment config
 cp server/.env.example server/.env
-# Edit server/.env with your settings
+# Edit server/.env with your local Postgres connection
 
 # 3. Run database migrations & seed data
 npm run db:migrate
@@ -44,10 +44,13 @@ The app will be available at:
 - Authenticated app: http://localhost:3000/app
 - API: http://localhost:4000/api
 
+Local development expects PostgreSQL. Set `DEV_DATABASE_URL` in `server/.env` for your local database, or point it at a non-production Postgres database.
+
 ## Environment Variables
 
 | Variable | Description |
 |----------|-------------|
+| `DEV_DATABASE_URL` | PostgreSQL connection string used for local development |
 | `DATABASE_URL` | PostgreSQL connection string used in production |
 | `JWT_SECRET` | Secret key for JWT signing |
 | `APP_URL` | Public base URL, for example `https://stewardview.app` |
@@ -107,6 +110,7 @@ This system uses **Plaid** to securely connect to any bank or credit union — o
 ## Important Notes
 
 - The public site lives at `/`; the authenticated product lives at `/app`.
+- The server now uses PostgreSQL in both development and production, so native SQLite/node-gyp builds are no longer part of the normal workflow.
 - Production startup runs migrations automatically, but it does not seed demo users.
 - Demo credentials shown in the login page are for local seeded development only.
 - Custom tenant subdomains or custom domains are not implemented yet. The current multi-tenant model is tenant-ID based, not host-header based.

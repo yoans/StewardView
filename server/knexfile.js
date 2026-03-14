@@ -1,13 +1,24 @@
 require('dotenv').config();
 const path = require('path');
 
+function getConnectionString(environment) {
+  if (environment === 'development') {
+    return process.env.DEV_DATABASE_URL || process.env.DATABASE_URL;
+  }
+  return process.env.DATABASE_URL;
+}
+
 module.exports = {
   development: {
-    client: 'better-sqlite3',
+    client: 'pg',
     connection: {
-      filename: path.join(__dirname, 'dev.sqlite3'),
+      connectionString: getConnectionString('development'),
+      ssl: false,
     },
-    useNullAsDefault: true,
+    pool: {
+      min: 1,
+      max: 5,
+    },
     migrations: {
       directory: path.join(__dirname, 'src', 'migrations'),
     },
@@ -18,8 +29,8 @@ module.exports = {
   production: {
     client: 'pg',
     connection: {
-      connectionString: process.env.DATABASE_URL,
-      ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
+      connectionString: getConnectionString('production'),
+      ssl: getConnectionString('production') ? { rejectUnauthorized: false } : false,
     },
     pool: {
       min: 2,
