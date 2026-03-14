@@ -3,7 +3,7 @@ node_modules/
 .env.*
 !.env.example
 !server/.env.example
-reports/
+server/reports/
 *.db
 *.sqlite
 *.sqlite3
