@@ -43,7 +43,18 @@ app.use(cors({ origin: corsOrigins, credentials: true }));
 app.use('/api/onboarding/webhook', express.raw({ type: 'application/json' }));
 
 app.use(express.json());
-app.use(morgan('combined'));
+// Skip health check pings from logs; use concise format in dev, minimal in prod
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'short' : 'dev', {
+  skip: (req) => req.path === '/api/health',
+}));
+
+// Block bots probing for env/config files
+app.use((req, res, next) => {
+  if (/^\/.env/.test(req.path) || /\.(git|sql|bak|config)/.test(req.path)) {
+    return res.status(404).end();
+  }
+  next();
+});
 
 // Rate limiting
 const limiter = rateLimit({

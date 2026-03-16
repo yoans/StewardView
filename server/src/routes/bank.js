@@ -11,6 +11,8 @@ let plaidClient = null;
 function getPlaidClient() {
   if (plaidClient) return plaidClient;
 
+  if (!process.env.PLAID_CLIENT_ID || !process.env.PLAID_SECRET) return null;
+
   try {
     const { Configuration, PlaidApi, PlaidEnvironments } = require('plaid');
     const configuration = new Configuration({
