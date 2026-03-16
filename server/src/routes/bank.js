@@ -3,6 +3,7 @@ const db = require('../models/db');
 const { authenticate, authorize } = require('../middleware/auth');
 const { requireTenant } = require('../middleware/tenant');
 const { logAudit } = require('../models/auditLog');
+const { encrypt, decrypt } = require('../utils/encrypt');
 
 let plaidClient = null;
 
@@ -68,7 +69,7 @@ router.post('/exchange-token', authenticate, requireTenant, authorize('admin', '
     const { public_token, institution, accounts } = req.body;
 
     const exchangeResponse = await client.itemPublicTokenExchange({ public_token });
-    const accessToken = exchangeResponse.data.access_token;
+    const accessToken = encrypt(exchangeResponse.data.access_token);
 
     // Save each linked account scoped to this tenant
     for (const account of accounts) {
@@ -110,7 +111,7 @@ router.post('/sync', authenticate, requireTenant, authorize('admin', 'treasurer'
     for (const account of accounts) {
       try {
         // Get balances
-        const balanceResponse = await client.accountsBalanceGet({ access_token: account.plaid_access_token });
+        const balanceResponse = await client.accountsBalanceGet({ access_token: decrypt(account.plaid_access_token) });
         const plaidAccount = balanceResponse.data.accounts.find(a => a.account_id === account.plaid_account_id);
 
         if (plaidAccount) {
@@ -125,7 +126,7 @@ router.post('/sync', authenticate, requireTenant, authorize('admin', 'treasurer'
         const startDate = new Date();
         startDate.setDate(startDate.getDate() - 30);
         const txnResponse = await client.transactionsGet({
-          access_token: account.plaid_access_token,
+          access_token: decrypt(account.plaid_access_token),
           start_date: startDate.toISOString().slice(0, 10),
           end_date: new Date().toISOString().slice(0, 10),
         });
@@ -185,16 +186,16 @@ router.get('/sync-log', authenticate, async (req, res) => {
 });
 
 // POST /api/bank/sync/:id — sync a single Plaid account by id
-router.post('/sync/:id', authenticate, authorize('admin', 'treasurer'), async (req, res) => {
+router.post('/sync/:id', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
   try {
     const client = getPlaidClient();
     if (!client) return res.status(503).json({ error: 'Plaid not configured' });
 
-    const account = await db('bank_accounts').where({ id: req.params.id, is_active: true }).first();
+    const account = await db('bank_accounts').where({ id: req.params.id, is_active: true, tenant_id: req.tenantId }).first();
     if (!account) return res.status(404).json({ error: 'Account not found' });
     if (!account.plaid_access_token) return res.status(400).json({ error: 'Not a Plaid-linked account' });
 
-    const balanceResponse = await client.accountsBalanceGet({ access_token: account.plaid_access_token });
+    const balanceResponse = await client.accountsBalanceGet({ access_token: decrypt(account.plaid_access_token) });
     const plaidAcc = balanceResponse.data.accounts.find(a => a.account_id === account.plaid_account_id);
 
     if (plaidAcc) {
