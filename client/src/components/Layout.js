@@ -21,7 +21,9 @@ export default function Layout({ user, onLogout, children }) {
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-3">
-              <span className="text-2xl">⛪</span>
+              <div className="bg-white rounded-lg p-1.5 flex items-center justify-center">
+                <img src="/logo.svg" alt="StewardView" className="h-8 w-auto" />
+              </div>
               <div>
                 <h1 className="text-lg font-bold">StewardView</h1>
                 <p className="text-blue-200 text-xs">Transparency System</p>
