@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy — StewardView</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            navy: { 50:'#f0f4ff',100:'#dce8ff',200:'#bad0ff',300:'#84abff',400:'#4d7eff',500:'#2353f5',600:'#1638dd',700:'#1530b5',800:'#162991',900:'#162578',950:'#101748' },
+            gold:  { 50:'#fdfae9',100:'#faf5c5',200:'#f5e878',300:'#f0d93a',400:'#e6c31b',500:'#c7a10e',600:'#a07c09',700:'#7a5b0c',800:'#634911',900:'#553e14',950:'#322208' },
+          },
+          fontFamily: { sans: ['Inter','ui-sans-serif','system-ui','sans-serif'] },
+        }
+      }
+    }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>body { font-family: 'Inter', sans-serif; }</style>
+</head>
+<body class="bg-white text-gray-800">
+
+  <!-- Nav -->
+  <nav class="bg-navy-950 border-b border-navy-900 px-6 py-4">
+    <div class="max-w-4xl mx-auto flex items-center justify-between">
+      <a href="/" class="flex items-center gap-2">
+        <img src="/landing/logo.svg" alt="StewardView" class="h-7 w-7" onerror="this.style.display='none'">
+        <span class="text-white font-semibold text-lg">StewardView</span>
+      </a>
+      <a href="/app/login" class="text-sm text-gray-400 hover:text-white transition-colors">Sign In</a>
+    </div>
+  </nav>
+
+  <!-- Content -->
+  <main class="max-w-4xl mx-auto px-6 py-16">
+    <h1 class="text-3xl font-bold text-navy-950 mb-2">Privacy Policy</h1>
+    <p class="text-sm text-gray-500 mb-10">Effective date: March 16, 2026 &nbsp;|&nbsp; Last updated: March 16, 2026</p>
+
+    <div class="prose prose-gray max-w-none space-y-10 text-gray-700 leading-relaxed">
+
+      <section>
+        <h2 class="text-xl font-semibold text-navy-900 mb-3">1. Who We Are</h2>
+        <p>StewardView is a financial management platform for churches and religious organizations, operated by Sagaciasoft LLC ("<strong>we</strong>", "<strong>us</strong>", or "<strong>our</strong>"). Our registered contact email is <a href="mailto:contact@sagaciasoft.com" class="text-navy-600 hover:underline">contact@sagaciasoft.com</a>.</p>
+        <p class="mt-2">This Privacy Policy explains what data we collect, how we use it, and the choices you have. It applies to anyone who uses the StewardView platform, including church administrators, treasurers, and other authorized users ("you" or "user").</p>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-semibold text-navy-900 mb-3">2. Data We Collect</h2>
+
+        <h3 class="font-semibold text-gray-800 mt-4 mb-2">2.1 Account Data</h3>
+        <p>When you create an account, we collect:</p>
+        <ul class="list-disc ml-6 mt-2 space-y-1">
+          <li>Your name and email address</li>
+          <li>Your organization (church) name</li>
+          <li>Your account role within your organization</li>
+          <li>A hashed (non-reversible) representation of your password — your password is never stored in plaintext</li>
+        </ul>
+
+        <h3 class="font-semibold text-gray-800 mt-4 mb-2">2.2 Financial Data</h3>
+        <p>When you use StewardView to manage your organization's finances, we collect and store:</p>
+        <ul class="list-disc ml-6 mt-2 space-y-1">
+          <li>Transaction records, fund balances, budgets, and financial reports you enter or import</li>
+          <li>Giving records and donor contribution data entered by authorized users</li>
+        </ul>
+
+        <h3 class="font-semibold text-gray-800 mt-4 mb-2">2.3 Bank Account Data (via Plaid)</h3>
+        <p>If you connect a bank account, StewardView uses <strong>Plaid Technologies, Inc.</strong> to retrieve bank data on your behalf. Through this integration, we receive and store:</p>
+        <ul class="list-disc ml-6 mt-2 space-y-1">
+          <li>Your bank's institution name and the last 4 digits of your account number (mask only — never full account numbers)</li>
+          <li>Account balances and transaction history</li>
+          <li>A Plaid access token, which is encrypted at rest using AES-256-GCM encryption before storage</li>
+        </ul>
+        <p class="mt-2">StewardView <strong>never</strong> receives or stores your bank login credentials. Bank authentication is handled entirely by Plaid's secure interface. For more information, see <a href="https://plaid.com/legal/#end-user-privacy-policy" class="text-navy-600 hover:underline" target="_blank" rel="noopener">Plaid's End User Privacy Policy</a>.</p>
+
+        <h3 class="font-semibold text-gray-800 mt-4 mb-2">2.4 Technical and Usage Data</h3>
+        <ul class="list-disc ml-6 mt-2 space-y-1">
+          <li>IP addresses, which are stored in our audit log for security and accountability purposes</li>
+          <li>HTTP request logs (request path, status code, timestamp) retained for 30 days</li>
+          <li>An immutable audit log of actions taken within your organization's account (who did what, when)</li>
+        </ul>
+        <p class="mt-2">We do not use analytics tracking services (e.g., Google Analytics), advertising pixels, or behavioral tracking tools.</p>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-semibold text-navy-900 mb-3">3. How We Use Your Data</h2>
+        <p>We use the data we collect solely to provide and improve StewardView's services:</p>
+        <ul class="list-disc ml-6 mt-2 space-y-1">
+          <li>To authenticate you and manage your session</li>
+          <li>To display your organization's financial data, transactions, and reports</li>
+          <li>To sync bank account data through Plaid on your behalf</li>
+          <li>To enforce role-based access controls within your organization</li>
+          <li>To maintain an audit trail of financial actions for accountability and record-keeping</li>
+          <li>To process subscription billing through Stripe</li>
+          <li>To detect and prevent unauthorized access, fraud, or security threats</li>
+          <li>To comply with applicable legal obligations</li>
+        </ul>
+        <p class="mt-3">We do <strong>not</strong> use your data for advertising, marketing profiling, or any purpose unrelated to operating the platform.</p>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-semibold text-navy-900 mb-3">4. Data Sharing</h2>
+        <p>We do not sell, rent, or share your data with third parties for commercial purposes. Data is shared only as follows:</p>
+        <ul class="list-disc ml-6 mt-2 space-y-2">
+          <li><strong>Plaid Technologies, Inc.</strong> — to retrieve authorized bank account data on your behalf. Plaid acts as a service provider under your direction.</li>
+          <li><strong>Railway.app</strong> — our cloud hosting and managed database provider. Railway processes data on our behalf under a data processing relationship and is SOC 2 Type II certified.</li>
+          <li><strong>Stripe, Inc.</strong> — to process subscription billing. Only billing-related information is shared with Stripe; financial transaction data and bank account data are not.</li>
+          <li><strong>Legal compliance</strong> — if required by law, court order, or to protect the rights and safety of users or the public, we may disclose data to government authorities.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-semibold text-navy-900 mb-3">5. Data Security</h2>
+        <p>We take the security of your financial data seriously:</p>
+        <ul class="list-disc ml-6 mt-2 space-y-1">
+          <li>All data is transmitted over HTTPS/TLS (TLS 1.2 or higher)</li>
+          <li>Plaid access tokens are encrypted at rest using AES-256-GCM with a unique initialization vector per token</li>
+          <li>Passwords are hashed using bcrypt and are never recoverable</li>
+          <li>Access to financial data is restricted by role-based access control enforced server-side</li>
+          <li>All data is logically isolated per organization — no tenant can access another tenant's data</li>
+          <li>Our hosting infrastructure (Railway) is SOC 2 Type II certified and provides encryption at rest for database storage</li>
+          <li>Production system access requires multi-factor authentication</li>
+        </ul>
+        <p class="mt-3">Despite these measures, no system is completely immune to risk. In the event of a security incident affecting your data, we will notify you within 72 hours of confirmed discovery.</p>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-semibold text-navy-900 mb-3">6. Data Retention</h2>
+        <p>We retain your data for as long as your account is active and for a period afterward to allow data export:</p>
+        <ul class="list-disc ml-6 mt-2 space-y-1">
+          <li><strong>Active accounts:</strong> Data is retained for the duration of your subscription</li>
+          <li><strong>Canceled accounts:</strong> Data is retained for 90 days after cancellation, during which you can request an export. After 90 days, all data — including financial records, user accounts, bank account information, and audit logs — is permanently deleted.</li>
+          <li><strong>Bank account data:</strong> Plaid access tokens and bank account metadata are deleted immediately when you unlink a bank account.</li>
+          <li><strong>Backup retention:</strong> Automated daily backups are retained for 30 days, then pruned.</li>
+        </ul>
+        <p class="mt-3">Note: Churches often have legal obligations to retain financial records (generally 7 years under IRS guidance for US nonprofits). We recommend exporting your data before cancellation if you need records beyond our 90-day retention window.</p>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-semibold text-navy-900 mb-3">7. Your Rights and Choices</h2>
+        <p>You have the following rights with respect to your personal data:</p>
+        <ul class="list-disc ml-6 mt-2 space-y-2">
+          <li><strong>Access:</strong> You can access your financial data and account information within the application at any time.</li>
+          <li><strong>Export:</strong> You can request a full export of your organization's data at any time by contacting us at <a href="mailto:hello@stewardview.app" class="text-navy-600 hover:underline">hello@stewardview.app</a>.</li>
+          <li><strong>Deletion:</strong> You may request deletion of your personal data. We will remove your personal identifiers within 30 days. Financial records attributed to your account may be retained for your organization's audit integrity at the request of your organization's administrator.</li>
+          <li><strong>Unlink bank accounts:</strong> You can unlink any connected bank account at any time through the application. This immediately removes the associated Plaid access token.</li>
+          <li><strong>Cancel your subscription:</strong> You may cancel at any time. Your data remains available for 90 days after cancellation before permanent deletion.</li>
+        </ul>
+        <p class="mt-3">To exercise any of these rights, contact us at <a href="mailto:hello@stewardview.app" class="text-navy-600 hover:underline">hello@stewardview.app</a>.</p>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-semibold text-navy-900 mb-3">8. Cookies and Tracking</h2>
+        <p>StewardView does not use advertising cookies, third-party tracking pixels, or behavioral analytics. The application uses a JSON Web Token (JWT) stored in memory for authentication; no persistent authentication cookies are set.</p>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-semibold text-navy-900 mb-3">9. Children's Privacy</h2>
+        <p>StewardView is intended for use by adults managing organizational finances. We do not knowingly collect personal data from individuals under the age of 18. If you believe a minor's data has been submitted to our platform, please contact us immediately.</p>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-semibold text-navy-900 mb-3">10. Changes to This Policy</h2>
+        <p>We may update this Privacy Policy from time to time. When we make material changes, we will update the effective date at the top of this page and notify active users by email. Continued use of StewardView after notification constitutes acceptance of the updated policy.</p>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-semibold text-navy-900 mb-3">11. Contact Us</h2>
+        <p>For privacy-related questions, data requests, or concerns, contact us at:</p>
+        <address class="not-italic mt-3 text-gray-700">
+          <strong>Sagaciasoft LLC / StewardView</strong><br>
+          Email: <a href="mailto:hello@stewardview.app" class="text-navy-600 hover:underline">hello@stewardview.app</a><br>
+          Platform security issues: <a href="mailto:contact@sagaciasoft.com" class="text-navy-600 hover:underline">contact@sagaciasoft.com</a>
+        </address>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-navy-950 mt-16 py-8 text-center text-xs text-gray-600">
+    <div class="max-w-4xl mx-auto px-6 flex flex-col sm:flex-row justify-between items-center gap-4">
+      <span>© 2026 StewardView. All rights reserved.</span>
+      <div class="flex gap-6">
+        <a href="/privacy" class="text-gray-400 hover:text-white transition-colors">Privacy Policy</a>
+        <a href="/terms" class="text-gray-400 hover:text-white transition-colors">Terms of Service</a>
+        <a href="mailto:hello@stewardview.app" class="text-gray-400 hover:text-white transition-colors">Contact</a>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>

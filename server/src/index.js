@@ -98,6 +98,8 @@ const landingPath = path.join(__dirname, '..', '..', 'landing');
 if (fs.existsSync(landingPath)) {
   app.use('/landing', express.static(landingPath));
   app.get('/', (req, res) => res.sendFile(path.join(landingPath, 'index.html')));
+  app.get('/privacy', (req, res) => res.sendFile(path.join(landingPath, 'privacy.html')));
+  app.get('/terms', (req, res) => res.sendFile(path.join(landingPath, 'terms.html')));
 }
 
 // Legacy app URLs now live under /app
