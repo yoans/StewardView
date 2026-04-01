@@ -8,7 +8,9 @@ const { logAudit } = require('../models/auditLog');
 // GET /api/transactions
 router.get('/', authenticate, requireTenant, async (req, res) => {
   try {
-    const { type, category_id, fund_id, status, start_date, end_date, limit = 100, offset = 0 } = req.query;
+    const { type, category_id, fund_id, status, start_date, end_date } = req.query;
+    const limit = Math.min(Math.max(parseInt(req.query.limit) || 100, 1), 500);
+    const offset = Math.max(parseInt(req.query.offset) || 0, 0);
 
     let query = db('transactions')
       .leftJoin('categories', 'transactions.category_id', 'categories.id')
@@ -56,7 +58,14 @@ router.get('/:id', authenticate, requireTenant, async (req, res) => {
 // POST /api/transactions
 router.post('/', authenticate, requireTenant, authorize('admin', 'treasurer', 'finance_committee'), async (req, res) => {
   try {
-    const { type, amount, date, description, payee_payer, check_number, category_id, bank_account_id, fund_id, notes } = req.body;
+    const { type, amount, date, description, payee_payer, check_number, category_id, bank_account_id, notes } = req.body;
+    let { fund_id } = req.body;
+
+    // Auto-default income to General Fund if no fund specified
+    if (!fund_id && type === 'income') {
+      const generalFund = await db('funds').where({ name: 'General Fund', is_active: true, tenant_id: req.tenantId }).first();
+      if (generalFund) fund_id = generalFund.id;
+    }
 
     const ref_number = uuidv4();
     const [{ id }] = await db('transactions').insert({

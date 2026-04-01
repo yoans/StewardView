@@ -2,7 +2,7 @@ const { Resend } = require('resend');
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-const FROM_ADDRESS = process.env.EMAIL_FROM || 'StewardView <noreply@stewardview.app>';
+const FROM_ADDRESS = process.env.EMAIL_FROM || 'StewardView <noreply@stewardview.com>';
 
 async function sendMfaCode(toEmail, code) {
   await resend.emails.send({

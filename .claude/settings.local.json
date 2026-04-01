@@ -5,7 +5,9 @@
       "WebFetch(domain:gist.github.com)",
       "WebFetch(domain:security.plaid.com)",
       "WebSearch",
-      "WebFetch(domain:www.jotform.com)"
+      "WebFetch(domain:www.jotform.com)",
+      "Bash(xargs grep:*)",
+      "Bash(npm install:*)"
     ]
   }
 }

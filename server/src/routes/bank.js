@@ -42,7 +42,7 @@ router.get('/accounts', authenticate, requireTenant, async (req, res) => {
 router.post('/link-token', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
   try {
     const client = getPlaidClient();
-    if (!client) return res.status(503).json({ error: 'Plaid not configured. Set PLAID_CLIENT_ID and PLAID_SECRET in server/.env' });
+    if (!client) return res.status(503).json({ error: 'Bank connection is not configured. Please contact your administrator.' });
 
     const orgName = req.tenant?.name || process.env.ORG_NAME || 'StewardView';
 
@@ -178,9 +178,10 @@ router.get('/balances', authenticate, requireTenant, async (req, res) => {
 });
 
 // GET /api/bank/sync-log — view sync history
-router.get('/sync-log', authenticate, async (req, res) => {
+router.get('/sync-log', authenticate, requireTenant, async (req, res) => {
   const log = await db('bank_sync_log')
     .leftJoin('bank_accounts', 'bank_sync_log.bank_account_id', 'bank_accounts.id')
+    .where('bank_accounts.tenant_id', req.tenantId)
     .select('bank_sync_log.*', 'bank_accounts.name as account_name')
     .orderBy('synced_at', 'desc')
     .limit(50);
@@ -212,7 +213,7 @@ router.post('/sync/:id', authenticate, requireTenant, authorize('admin', 'treasu
     res.json({ message: 'Account synced', balance: plaidAcc?.balances.current });
   } catch (err) {
     console.error('Single account sync error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Failed to sync account' });
   }
 });
 

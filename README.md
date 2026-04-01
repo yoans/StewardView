@@ -53,7 +53,7 @@ Local development expects PostgreSQL. Set `DEV_DATABASE_URL` in `server/.env` fo
 | `DEV_DATABASE_URL` | PostgreSQL connection string used for local development |
 | `DATABASE_URL` | PostgreSQL connection string used in production |
 | `JWT_SECRET` | Secret key for JWT signing |
-| `APP_URL` | Public base URL, for example `https://stewardview.app` |
+| `APP_URL` | Public base URL, for example `https://stewardview.com` |
 | `PLAID_CLIENT_ID` | Plaid client ID |
 | `PLAID_SECRET` | Plaid secret |
 | `PLAID_ENV` | `sandbox`, `development`, or `production` |

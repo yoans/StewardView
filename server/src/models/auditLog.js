@@ -3,7 +3,7 @@ const db = require('./db');
 /**
  * Append a row to the audit_log table.
  */
-async function logAudit({ entityType, entityId, action, oldValues, newValues, changeReason, userId, userName, ipAddress }) {
+async function logAudit({ entityType, entityId, action, oldValues, newValues, changeReason, userId, userName, ipAddress, tenantId }) {
   return db('audit_log').insert({
     entity_type: entityType,
     entity_id: entityId,
@@ -14,6 +14,7 @@ async function logAudit({ entityType, entityId, action, oldValues, newValues, ch
     user_id: userId || null,
     user_name: userName || null,
     ip_address: ipAddress || null,
+    tenant_id: tenantId || null,
   });
 }
 
@@ -29,8 +30,9 @@ async function getAuditHistory(entityType, entityId) {
 /**
  * Retrieve full audit log with optional filters.
  */
-async function getAuditLog({ entityType, userId, startDate, endDate, limit = 100, offset = 0 }) {
-  let query = db('audit_log').orderBy('created_at', 'desc').limit(limit).offset(offset);
+async function getAuditLog({ tenantId, entityType, userId, startDate, endDate, limit = 100, offset = 0 }) {
+  if (!tenantId) throw new Error('tenantId is required for audit log queries');
+  let query = db('audit_log').where('tenant_id', tenantId).orderBy('created_at', 'desc').limit(limit).offset(offset);
   if (entityType) query = query.where('entity_type', entityType);
   if (userId) query = query.where('user_id', userId);
   if (startDate) query = query.where('created_at', '>=', startDate);

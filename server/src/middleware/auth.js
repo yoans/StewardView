@@ -1,6 +1,8 @@
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
+const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production'
+  ? (() => { throw new Error('JWT_SECRET must be set in production'); })()
+  : 'dev-secret');
 
 /**
  * Verify JWT and attach user to request.

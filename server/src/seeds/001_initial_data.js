@@ -2,6 +2,10 @@ const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 
 exports.seed = async function (knex) {
+  if (process.env.NODE_ENV === 'production') {
+    console.error('REFUSED: seed data must not run in production');
+    return;
+  }
   // Clear tables in order
   await knex('monthly_reports').del();
   await knex('bank_sync_log').del();

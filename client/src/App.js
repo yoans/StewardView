@@ -43,7 +43,7 @@ function SuspendedPage() {
             ? 'Your subscription has been canceled. Your data is safely preserved. Contact us to reactivate your account.'
             : 'Your account has been temporarily suspended. Please contact support to restore access.'}
         </p>
-        <a href="mailto:support@stewardview.app"
+        <a href="mailto:support@stewardview.com"
           className="inline-block bg-indigo-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-indigo-700 transition">
           Contact Support
         </a>
@@ -111,7 +111,7 @@ function PaymentSuccessPage({ onLogin }) {
           <>
             <p className="text-red-600 mb-4">{error}</p>
             <a
-              href="mailto:support@stewardview.app"
+              href="mailto:support@stewardview.com"
               className="inline-block bg-indigo-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-indigo-700 transition"
             >
               Contact Support

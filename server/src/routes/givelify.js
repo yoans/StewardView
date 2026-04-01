@@ -40,14 +40,16 @@ async function mapEnvelopeToFund(envelope, tenantId) {
 // GET /api/givelify — list imported contributions
 router.get('/', authenticate, requireTenant, async (req, res) => {
   try {
-    const { status, start_date, end_date, limit = 100, offset = 0 } = req.query;
+    const { status, start_date, end_date } = req.query;
+    const limit = Math.min(Math.max(parseInt(req.query.limit) || 100, 1), 500);
+    const offset = Math.max(parseInt(req.query.offset) || 0, 0);
     let query = db('givelify_contributions')
       .leftJoin('funds', 'givelify_contributions.fund_id', 'funds.id')
       .select('givelify_contributions.*', 'funds.name as fund_name')
       .where('givelify_contributions.tenant_id', req.tenantId)
       .orderBy('givelify_contributions.date', 'desc')
-      .limit(parseInt(limit))
-      .offset(parseInt(offset));
+      .limit(limit)
+      .offset(offset);
     if (status) query = query.where('givelify_contributions.status', status);
     if (start_date) query = query.where('givelify_contributions.date', '>=', start_date);
     if (end_date) query = query.where('givelify_contributions.date', '<=', end_date);

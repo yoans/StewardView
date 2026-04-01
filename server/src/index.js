@@ -64,6 +64,17 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
+// Stricter rate limit on auth endpoints (login, signup, password changes)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  message: { error: 'Too many authentication attempts, please try again later' },
+});
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/signup', authLimiter);
+app.use('/api/auth/change-password', authLimiter);
+app.use('/api/onboarding/register', authLimiter);
+
 // ── API Routes ───────────────────────────────────────────
 // Health check
 app.get('/api/health', (req, res) => {
@@ -170,6 +181,62 @@ cron.schedule('0 2 * * *', async () => {
   }
 });
 
+// ── Cron: Process recurring fund transfers daily at 7 AM ─
+cron.schedule('0 7 * * *', async () => {
+  console.log('Running recurring fund transfers...');
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const due = await db('recurring_transfers')
+      .where({ is_active: true })
+      .where('next_run_date', '<=', today);
+
+    for (const rt of due) {
+      try {
+        const fromFund = await db('funds').where({ id: rt.from_fund_id }).first();
+        const toFund = await db('funds').where({ id: rt.to_fund_id }).first();
+        if (!fromFund || !toFund) continue;
+        if (fromFund.current_balance < rt.amount) {
+          console.warn(`Skipping recurring transfer ${rt.id}: insufficient balance in ${fromFund.name}`);
+          continue;
+        }
+
+        // Execute the transfer
+        await db('fund_transactions').insert({
+          fund_id: fromFund.id, type: 'transfer_out', amount: rt.amount, date: today,
+          description: rt.description || `Recurring transfer to ${toFund.name}`,
+          created_by: rt.created_by,
+        });
+        await db('funds').where({ id: fromFund.id }).decrement('current_balance', rt.amount);
+
+        await db('fund_transactions').insert({
+          fund_id: toFund.id, type: 'transfer_in', amount: rt.amount, date: today,
+          description: rt.description || `Recurring transfer from ${fromFund.name}`,
+          created_by: rt.created_by,
+        });
+        await db('funds').where({ id: toFund.id }).increment('current_balance', rt.amount);
+
+        // Advance next_run_date
+        const next = new Date(rt.next_run_date);
+        if (rt.frequency === 'monthly') {
+          next.setMonth(next.getMonth() + 1);
+        } else {
+          next.setDate(next.getDate() + 7);
+        }
+        await db('recurring_transfers').where({ id: rt.id }).update({
+          next_run_date: next.toISOString().slice(0, 10),
+          last_run_date: today,
+        });
+
+        console.log(`Recurring transfer ${rt.id}: ${rt.amount} from ${fromFund.name} to ${toFund.name}`);
+      } catch (transferErr) {
+        console.error(`Recurring transfer ${rt.id} failed:`, transferErr.message);
+      }
+    }
+  } catch (err) {
+    console.error('Recurring transfer cron error:', err);
+  }
+});
+
 // ── Serve React client in production ─────────────────────
 const clientBuildPath = path.join(__dirname, '..', '..', 'client', 'build');
 if (process.env.NODE_ENV === 'production' || fs.existsSync(clientBuildPath)) {
@@ -230,8 +297,15 @@ async function initializeApp() {
 // ── Start ────────────────────────────────────────────────
 (async () => {
   // Warn loudly if JWT_SECRET is the insecure default in production
-  if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'dev-secret')) {
-    console.error('SECURITY WARNING: JWT_SECRET is not set or is using the insecure default. Set a strong JWT_SECRET environment variable immediately.');
+  if (process.env.NODE_ENV === 'production') {
+    const missing = [];
+    if (!process.env.JWT_SECRET || process.env.JWT_SECRET.includes('change') || process.env.JWT_SECRET === 'dev-secret') missing.push('JWT_SECRET');
+    if (!process.env.PLATFORM_ADMIN_SECRET || process.env.PLATFORM_ADMIN_SECRET.includes('change')) missing.push('PLATFORM_ADMIN_SECRET');
+    if (!process.env.PLAID_TOKEN_KEY) missing.push('PLAID_TOKEN_KEY');
+    if (missing.length) {
+      console.error(`FATAL: Missing or insecure production secrets: ${missing.join(', ')}. Server will not start.`);
+      process.exit(1);
+    }
   }
 
   const server = app.listen(PORT, '0.0.0.0', () => {

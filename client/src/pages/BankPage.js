@@ -17,7 +17,7 @@ function PlaidLinkButton({ onSuccess, onExit }) {
       const res = await bankAPI.linkToken();
       setLinkToken(res.data.link_token);
     } catch (err) {
-      setTokenError(err.response?.data?.error || 'Could not start bank connection. Check Plaid credentials in server/.env');
+      setTokenError(err.response?.data?.error || 'Could not start bank connection. Please contact support.');
     }
     setTokenLoading(false);
   };

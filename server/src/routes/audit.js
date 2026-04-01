@@ -34,11 +34,11 @@ router.get('/', authenticate, requireTenant, async (req, res) => {
 });
 
 // GET /api/audit/:entityType/:entityId — audit trail for a specific entity
-router.get('/:entityType/:entityId', authenticate, async (req, res) => {
+router.get('/:entityType/:entityId', authenticate, requireTenant, async (req, res) => {
   try {
     const { entityType, entityId } = req.params;
     const entries = await db('audit_log')
-      .where({ entity_type: entityType, entity_id: entityId })
+      .where({ entity_type: entityType, entity_id: entityId, tenant_id: req.tenantId })
       .orderBy('created_at', 'desc');
 
     const parsed = entries.map(entry => ({
