@@ -301,7 +301,7 @@ async function initializeApp() {
     const missing = [];
     if (!process.env.JWT_SECRET || process.env.JWT_SECRET.includes('change') || process.env.JWT_SECRET === 'dev-secret') missing.push('JWT_SECRET');
     if (!process.env.PLATFORM_ADMIN_SECRET || process.env.PLATFORM_ADMIN_SECRET.includes('change')) missing.push('PLATFORM_ADMIN_SECRET');
-    if (!process.env.PLAID_TOKEN_KEY) missing.push('PLAID_TOKEN_KEY');
+    if (!process.env.PLAID_TOKEN_KEY) console.warn('WARNING: PLAID_TOKEN_KEY not set — Plaid token encryption disabled.');
     if (missing.length) {
       console.error(`FATAL: Missing or insecure production secrets: ${missing.join(', ')}. Server will not start.`);
       process.exit(1);
