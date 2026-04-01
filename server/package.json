@@ -1,7 +1,7 @@
 {
   "name": "stewardview-server",
   "version": "1.0.0",
-  "description": "HRCOC Finance API Server",
+  "description": "StewardView Finance API Server",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
@@ -23,6 +23,8 @@
     "pdfkit": "^0.15.0",
     "pg": "^8.11.3",
     "plaid": "^23.0.0",
+    "resend": "^6.9.4",
+    "stripe": "^14.25.0",
     "uuid": "^9.0.0"
   },
   "devDependencies": {

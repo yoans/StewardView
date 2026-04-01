@@ -1,13 +1,18 @@
 const router = require('express').Router();
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const db = require('../models/db');
 const { authenticate, authorize } = require('../middleware/auth');
 const { requireTenant } = require('../middleware/tenant');
 const { logAudit } = require('../models/auditLog');
+const { sendMfaCode } = require('../services/email');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
+const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production'
+  ? (() => { throw new Error('JWT_SECRET must be set in production'); })()
+  : 'dev-secret');
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h';
+const MFA_CODE_EXPIRY_MINUTES = 10;
 const MIN_ADMINS = 2;
 
 // ── Helper: count active admins within a tenant ──────────
@@ -18,7 +23,12 @@ async function countActiveAdmins(tenantId) {
   return parseInt(result.count) || 0;
 }
 
-// POST /api/auth/login
+// ── MFA helpers ─────────────────────────────────────────
+function generateMfaCode() {
+  return crypto.randomInt(100000, 999999).toString();
+}
+
+// POST /api/auth/login — validates credentials, sends MFA code via email
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -30,6 +40,58 @@ router.post('/login', async (req, res) => {
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
 
+    // Invalidate any existing unused codes for this user
+    await db('mfa_codes').where({ user_id: user.id, used: false }).update({ used: true });
+
+    // Generate and store MFA code
+    const code = generateMfaCode();
+    const expiresAt = new Date(Date.now() + MFA_CODE_EXPIRY_MINUTES * 60 * 1000);
+    await db('mfa_codes').insert({ user_id: user.id, code, expires_at: expiresAt });
+
+    // Send code via email
+    await sendMfaCode(user.email, code);
+
+    // Return a short-lived MFA token (not a session token — only good for /verify-mfa)
+    const mfaToken = jwt.sign(
+      { id: user.id, purpose: 'mfa' },
+      JWT_SECRET,
+      { expiresIn: `${MFA_CODE_EXPIRY_MINUTES}m` },
+    );
+
+    res.json({ mfa_required: true, mfa_token: mfaToken });
+  } catch (err) {
+    console.error('Login error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/auth/verify-mfa — exchange MFA token + code for a real session token
+router.post('/verify-mfa', async (req, res) => {
+  try {
+    const { mfa_token, code } = req.body;
+    if (!mfa_token || !code) return res.status(400).json({ error: 'MFA token and code are required' });
+
+    let decoded;
+    try {
+      decoded = jwt.verify(mfa_token, JWT_SECRET);
+    } catch {
+      return res.status(401).json({ error: 'MFA session expired. Please log in again.' });
+    }
+    if (decoded.purpose !== 'mfa') return res.status(401).json({ error: 'Invalid token' });
+
+    const record = await db('mfa_codes')
+      .where({ user_id: decoded.id, code: code.trim(), used: false })
+      .where('expires_at', '>', new Date())
+      .first();
+
+    if (!record) return res.status(401).json({ error: 'Invalid or expired code' });
+
+    // Mark code as used
+    await db('mfa_codes').where({ id: record.id }).update({ used: true });
+
+    const user = await db('users').where({ id: decoded.id, is_active: true }).first();
+    if (!user) return res.status(401).json({ error: 'Account not found' });
+
     const payload = {
       id: user.id, email: user.email, name: user.name, role: user.role,
       tenant_id: user.tenant_id || null,
@@ -39,13 +101,13 @@ router.post('/login', async (req, res) => {
 
     await logAudit({
       entityType: 'user', entityId: user.id, action: 'login',
-      newValues: { email: user.email }, userName: user.name,
+      newValues: { email: user.email, mfa: true }, userName: user.name,
       ipAddress: req.ip,
     });
 
     res.json({ token, user: payload });
   } catch (err) {
-    console.error('Login error:', err);
+    console.error('MFA verify error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

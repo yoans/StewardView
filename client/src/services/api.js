@@ -35,6 +35,7 @@ api.interceptors.response.use(
 // ── Auth ─────────────────────────────────────────────────
 export const authAPI = {
   login: (email, password) => api.post('/auth/login', { email, password }),
+  verifyMfa: (mfa_token, code) => api.post('/auth/verify-mfa', { mfa_token, code }),
   signup: (data) => api.post('/auth/signup', data),
   me: () => api.get('/auth/me'),
   getUsers: () => api.get('/auth/users'),
@@ -61,7 +62,11 @@ export const fundsAPI = {
   create: (data) => api.post('/funds', data),
   update: (id, data) => api.put(`/funds/${id}`, data),
   transfer: (fromId, data) => api.post(`/funds/${fromId}/transfer`, data),
+  adjust: (id, data) => api.post(`/funds/${id}/adjust`, data),
   history: (id) => api.get(`/funds/${id}/history`),
+  recurringList: () => api.get('/funds/recurring/list'),
+  recurringCreate: (data) => api.post('/funds/recurring', data),
+  recurringDelete: (id) => api.delete(`/funds/recurring/${id}`),
 };
 
 // ── Budgets ──────────────────────────────────────────────
