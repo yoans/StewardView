@@ -1,11 +1,12 @@
 const jwt = require('jsonwebtoken');
+const db = require('../models/db');
 
 const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production'
   ? (() => { throw new Error('JWT_SECRET must be set in production'); })()
   : 'dev-secret');
 
 /**
- * Verify JWT and attach user to request.
+ * Verify JWT and confirm user is still active in the database.
  */
 function authenticate(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -16,8 +17,15 @@ function authenticate(req, res, next) {
   try {
     const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded; // { id, email, name, role, tenant_id, is_platform_admin }
-    next();
+
+    // Re-check that the user hasn't been deactivated since the JWT was issued
+    db('users').where({ id: decoded.id, is_active: true }).select('id').first()
+      .then((row) => {
+        if (!row) return res.status(401).json({ error: 'Account deactivated' });
+        req.user = decoded;
+        next();
+      })
+      .catch(() => res.status(500).json({ error: 'Internal server error' }));
   } catch (err) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }

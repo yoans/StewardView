@@ -127,21 +127,19 @@ router.post('/signup', async (req, res) => {
     if (existing) return res.status(409).json({ error: 'Email already registered' });
 
     const hash = await bcrypt.hash(password, 10);
-    // For self-registration within an existing tenant, tenant_id can be passed in the request.
-    // This is used by admins inviting new users to their tenant.
-    const tenantId = req.body.tenant_id || null;
+    // Self-signup never assigns a tenant — admins invite users via POST /users instead.
     const [{ id }] = await db('users').insert({
       email, password_hash: hash, name, role: 'viewer', is_active: true,
-      tenant_id: tenantId,
+      tenant_id: null,
     }).returning('id');
 
     await logAudit({
       entityType: 'user', entityId: id, action: 'signup',
-      newValues: { email, name, role: 'viewer', tenant_id: tenantId },
+      newValues: { email, name, role: 'viewer' },
       ipAddress: req.ip,
     });
 
-    const payload = { id, email, name, role: 'viewer', tenant_id: tenantId };
+    const payload = { id, email, name, role: 'viewer', tenant_id: null };
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 
     res.status(201).json({ token, user: payload });
@@ -200,20 +198,26 @@ router.get('/users', authenticate, requireTenant, authorize('admin', 'treasurer'
   res.json(users);
 });
 
-// PUT /api/auth/users/:id — admin updates user role / active status
-router.put('/users/:id', authenticate, authorize('admin'), async (req, res) => {
+// PUT /api/auth/users/:id — admin updates user role / active status (same tenant only)
+router.put('/users/:id', authenticate, requireTenant, authorize('admin'), async (req, res) => {
   try {
-    const target = await db('users').where({ id: req.params.id }).first();
+    const target = await db('users').where({ id: req.params.id, tenant_id: req.tenantId }).first();
     if (!target) return res.status(404).json({ error: 'User not found' });
 
+    const VALID_ROLES = ['admin', 'treasurer', 'viewer'];
     const updates = {};
-    if (req.body.role !== undefined) updates.role = req.body.role;
+    if (req.body.role !== undefined) {
+      if (!VALID_ROLES.includes(req.body.role)) {
+        return res.status(400).json({ error: `Invalid role. Must be one of: ${VALID_ROLES.join(', ')}` });
+      }
+      updates.role = req.body.role;
+    }
     if (req.body.is_active !== undefined) updates.is_active = req.body.is_active;
     if (req.body.name !== undefined) updates.name = req.body.name;
 
     // Enforce minimum 2 admins rule
     if (target.role === 'admin' && (updates.role && updates.role !== 'admin' || updates.is_active === false)) {
-      const adminCount = await countActiveAdmins(req.user.tenant_id);
+      const adminCount = await countActiveAdmins(req.tenantId);
       if (adminCount <= MIN_ADMINS) {
         return res.status(400).json({
           error: `Cannot remove admin role. System requires at least ${MIN_ADMINS} active admins. Current: ${adminCount}.`,
@@ -239,10 +243,10 @@ router.put('/users/:id', authenticate, authorize('admin'), async (req, res) => {
   }
 });
 
-// DELETE /api/auth/users/:id — deactivate user (soft delete)
-router.delete('/users/:id', authenticate, authorize('admin'), async (req, res) => {
+// DELETE /api/auth/users/:id — deactivate user (soft delete, same tenant only)
+router.delete('/users/:id', authenticate, requireTenant, authorize('admin'), async (req, res) => {
   try {
-    const target = await db('users').where({ id: req.params.id }).first();
+    const target = await db('users').where({ id: req.params.id, tenant_id: req.tenantId }).first();
     if (!target) return res.status(404).json({ error: 'User not found' });
 
     // Can't deactivate yourself
@@ -252,7 +256,7 @@ router.delete('/users/:id', authenticate, authorize('admin'), async (req, res) =
 
     // Enforce minimum 2 admins rule
     if (target.role === 'admin') {
-      const adminCount = await countActiveAdmins(req.user.tenant_id);
+      const adminCount = await countActiveAdmins(req.tenantId);
       if (adminCount <= MIN_ADMINS) {
         return res.status(400).json({
           error: `Cannot deactivate admin. System requires at least ${MIN_ADMINS} active admins.`,

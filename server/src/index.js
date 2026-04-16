@@ -75,6 +75,14 @@ app.use('/api/auth/signup', authLimiter);
 app.use('/api/auth/change-password', authLimiter);
 app.use('/api/onboarding/register', authLimiter);
 
+// Very strict limit on MFA code verification (6-digit codes are brute-forceable)
+const mfaLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { error: 'Too many verification attempts. Please request a new code.' },
+});
+app.use('/api/auth/verify-mfa', mfaLimiter);
+
 // ── API Routes ───────────────────────────────────────────
 // Health check
 app.get('/api/health', (req, res) => {
@@ -178,6 +186,19 @@ cron.schedule('0 2 * * *', async () => {
     console.log(`✅ Backup complete: ${tablesBackedUp.length} tables, ${totalRows} rows`);
   } catch (err) {
     console.error('Scheduled backup error:', err);
+  }
+});
+
+// ── Cron: Clean up expired/used MFA codes every 6 hours ─
+cron.schedule('0 */6 * * *', async () => {
+  try {
+    const deleted = await db('mfa_codes')
+      .where('used', true)
+      .orWhere('expires_at', '<', new Date())
+      .del();
+    if (deleted > 0) console.log(`Cleaned up ${deleted} expired/used MFA codes`);
+  } catch (err) {
+    console.error('MFA code cleanup error:', err);
   }
 });
 
