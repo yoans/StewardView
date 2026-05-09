@@ -198,41 +198,9 @@ router.post('/reset-password', async (req, res) => {
   }
 });
 
-// POST /api/auth/signup — self-registration (creates viewer account, admin can upgrade later)
+// POST /api/auth/signup — disabled: public signup must create a tenant through onboarding
 router.post('/signup', async (req, res) => {
-  try {
-    const { email, password, name } = req.body;
-    if (!email || !password || !name) {
-      return res.status(400).json({ error: 'Email, password, and name are required' });
-    }
-    if (password.length < 8) {
-      return res.status(400).json({ error: 'Password must be at least 8 characters' });
-    }
-
-    const existing = await db('users').where({ email }).first();
-    if (existing) return res.status(409).json({ error: 'Email already registered' });
-
-    const hash = await bcrypt.hash(password, 10);
-    // Self-signup never assigns a tenant — admins invite users via POST /users instead.
-    const [{ id }] = await db('users').insert({
-      email, password_hash: hash, name, role: 'viewer', is_active: true,
-      tenant_id: null,
-    }).returning('id');
-
-    await logAudit({
-      entityType: 'user', entityId: id, action: 'signup',
-      newValues: { email, name, role: 'viewer' },
-      ipAddress: req.ip,
-    });
-
-    const payload = { id, email, name, role: 'viewer', tenant_id: null };
-    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
-
-    res.status(201).json({ token, user: payload });
-  } catch (err) {
-    console.error('Signup error:', err);
-    res.status(500).json({ error: 'Server error' });
-  }
+  res.status(410).json({ error: 'Use church account registration to sign up.' });
 });
 
 // GET /api/auth/me

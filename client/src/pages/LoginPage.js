@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { authAPI } from '../services/api';
+import { authAPI, onboardingAPI } from '../services/api';
 
 export default function LoginPage({ onLogin }) {
   const location = useLocation();
@@ -9,6 +9,7 @@ export default function LoginPage({ onLogin }) {
   const [step, setStep] = useState('credentials'); // 'credentials' | 'mfa' | 'forgot' | 'reset'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [churchName, setChurchName] = useState('');
   const [resetPassword, setResetPassword] = useState('');
   const [resetConfirm, setResetConfirm] = useState('');
   const [resetToken, setResetToken] = useState('');
@@ -49,9 +50,17 @@ export default function LoginPage({ onLogin }) {
           onLogin(res.data.user, res.data.token);
         }
       } else {
+        if (!churchName.trim()) { setError('Church name is required'); setLoading(false); return; }
         if (!name.trim()) { setError('Name is required'); setLoading(false); return; }
         if (password.length < 8) { setError('Password must be at least 8 characters'); setLoading(false); return; }
-        const res = await authAPI.signup({ email, password, name });
+        const res = await onboardingAPI.register({
+          churchName,
+          adminName: name,
+          adminEmail: email,
+          adminPassword: password,
+          plan: 'free',
+          amount: 0,
+        });
         onLogin(res.data.user, res.data.token);
       }
     } catch (err) {
@@ -321,14 +330,24 @@ export default function LoginPage({ onLogin }) {
               )}
 
               {mode === 'signup' && (
-                <div>
-                  <label className="label">Full Name</label>
-                  <input
-                    type="text" className="input" value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Your full name" required
-                  />
-                </div>
+                <>
+                  <div>
+                    <label className="label">Church / Congregation Name</label>
+                    <input
+                      type="text" className="input" value={churchName}
+                      onChange={(e) => setChurchName(e.target.value)}
+                      placeholder="Grace Community Church" required
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Full Name</label>
+                    <input
+                      type="text" className="input" value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="Your full name" required
+                    />
+                  </div>
+                </>
               )}
 
               <div>
@@ -367,7 +386,7 @@ export default function LoginPage({ onLogin }) {
 
             {mode === 'signup' && (
               <p className="mt-4 text-xs text-center text-gray-500">
-                New accounts are created as viewers. An admin will set your access level.
+                This creates your church account and makes you the first admin.
               </p>
             )}
           </>

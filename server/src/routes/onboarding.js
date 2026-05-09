@@ -75,13 +75,13 @@ router.post('/register', async (req, res) => {
       tenant_id: tenantId,
     }).returning('id');
 
-    // Seed default categories for this tenant
-    await seedDefaultCategories(tenantId, userId);
+    // Seed default financial structure for this tenant
+    await seedDefaultFinancialStructure(tenantId, userId);
 
     await logAudit({
       entityType: 'tenant', entityId: tenantId, action: 'create',
       newValues: { name: churchName, slug, plan, admin_email: adminEmail },
-      userId, userName: adminName, ipAddress: req.ip,
+      userId, userName: adminName, ipAddress: req.ip, tenantId,
     });
 
     const payload = { id: userId, email: adminEmail, name: adminName, role: 'admin', tenant_id: tenantId };
@@ -280,8 +280,8 @@ router.get('/tenant-info/:slug', async (req, res) => {
   }
 });
 
-// ── Seed default categories for new tenants ───────────────
-async function seedDefaultCategories(tenantId, userId) {
+// ── Seed default financial structure for new tenants ─────
+async function seedDefaultFinancialStructure(tenantId, userId) {
   const categories = [
     { name: 'Tithes & Offerings', type: 'income', description: 'General weekly contributions', tenant_id: tenantId },
     { name: 'Directed Contributions', type: 'income', description: 'Funds given for specific purposes', tenant_id: tenantId },
@@ -299,6 +299,14 @@ async function seedDefaultCategories(tenantId, userId) {
     { name: 'Mortgage / Rent', type: 'expense', description: 'Building payments', tenant_id: tenantId },
   ];
   await db('categories').insert(categories);
+
+  await db('funds').insert([
+    { name: 'General Fund', description: 'Unrestricted general operating fund', current_balance: 0, is_restricted: false, tenant_id: tenantId },
+    { name: 'Missions Fund', description: 'Designated for missionary support', current_balance: 0, is_restricted: true, tenant_id: tenantId },
+    { name: 'Building Fund', description: 'Designated for building repairs and improvements', current_balance: 0, is_restricted: true, tenant_id: tenantId },
+    { name: 'Benevolence Fund', description: 'Designated for member/community assistance', current_balance: 0, is_restricted: true, tenant_id: tenantId },
+    { name: 'Youth Fund', description: 'Designated for youth activities and camp', current_balance: 0, is_restricted: true, tenant_id: tenantId },
+  ]);
 }
 
 module.exports = router;
