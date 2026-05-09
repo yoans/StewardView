@@ -1,53 +1,92 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { usePlaidLink } from 'react-plaid-link';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { bankAPI } from '../services/api';
 
 const fmt = (n) => parseFloat(n || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
-// ── Plaid Link Button ───────────────────────────────────────────────────────
-function PlaidLinkButton({ onSuccess, onExit }) {
-  const [linkToken, setLinkToken] = useState(null);
-  const [tokenLoading, setTokenLoading] = useState(false);
-  const [tokenError, setTokenError] = useState('');
+// ── CSV Import Panel ────────────────────────────────────────────────────────
+function CsvImportPanel({ accounts, onImported }) {
+  const [accountId, setAccountId] = useState('');
+  const [file, setFile] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+  const fileInputRef = useRef(null);
 
-  const fetchToken = async () => {
-    setTokenLoading(true);
-    setTokenError('');
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!accountId) { setError('Select a bank account first'); return; }
+    if (!file) { setError('Choose a CSV file to upload'); return; }
+    setLoading(true);
+    setError('');
+    setResult(null);
     try {
-      const res = await bankAPI.linkToken();
-      setLinkToken(res.data.link_token);
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('bank_account_id', accountId);
+      const res = await bankAPI.importCsv(formData);
+      setResult(res.data);
+      setFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      onImported();
     } catch (err) {
-      setTokenError(err.response?.data?.error || 'Could not start bank connection. Please contact support.');
+      setError(err.response?.data?.error || 'Import failed');
     }
-    setTokenLoading(false);
+    setLoading(false);
   };
 
-  const { open, ready } = usePlaidLink({
-    token: linkToken,
-    onSuccess: (public_token, metadata) => {
-      setLinkToken(null); // reset so token isn't reused
-      onSuccess(public_token, metadata);
-    },
-    onExit: () => {
-      setLinkToken(null);
-      if (onExit) onExit();
-    },
-  });
-
-  useEffect(() => {
-    if (linkToken && ready) open();
-  }, [linkToken, ready, open]);
-
   return (
-    <div>
-      <button
-        className="btn-primary"
-        onClick={fetchToken}
-        disabled={tokenLoading}
-      >
-        {tokenLoading ? 'Connecting...' : '🔗 Connect a Bank Account'}
-      </button>
-      {tokenError && <p className="text-red-600 text-xs mt-2">{tokenError}</p>}
+    <div className="card bg-indigo-50 border border-indigo-200">
+      <div className="flex items-start gap-4">
+        <span className="text-3xl">📥</span>
+        <div className="flex-1">
+          <h3 className="font-bold text-indigo-900 mb-1">Import Transactions from CSV</h3>
+          <p className="text-sm text-indigo-700 mb-3">
+            Download a CSV export from your bank's website, then upload it here. Required columns: <strong>date</strong>, <strong>amount</strong>, <strong>description</strong>.
+            Optional: <em>type</em> (income/expense), <em>check_number</em>, <em>notes</em>.
+          </p>
+          {error && <p className="text-red-600 text-sm mb-2">{error}</p>}
+          {result && (
+            <div className="bg-green-50 border border-green-200 rounded p-3 text-sm text-green-800 mb-3">
+              <strong>Import complete:</strong> {result.imported} imported, {result.skipped} skipped.
+              {result.errors?.length > 0 && (
+                <ul className="mt-1 list-disc list-inside text-xs text-red-700">
+                  {result.errors.map((e, i) => <li key={i}>{e}</li>)}
+                </ul>
+              )}
+            </div>
+          )}
+          <form onSubmit={handleSubmit} className="flex flex-wrap gap-3 items-end">
+            <div>
+              <label className="block text-xs font-medium text-indigo-800 mb-1">Bank Account</label>
+              <select
+                className="input-field text-sm"
+                value={accountId}
+                onChange={e => setAccountId(e.target.value)}
+                required
+              >
+                <option value="">Select account…</option>
+                {accounts.map(a => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-indigo-800 mb-1">CSV File</label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                className="text-sm text-gray-700"
+                onChange={e => setFile(e.target.files[0] || null)}
+                required
+              />
+            </div>
+            <button type="submit" className="btn-primary text-sm" disabled={loading}>
+              {loading ? 'Importing…' : '⬆️ Import'}
+            </button>
+          </form>
+        </div>
+      </div>
     </div>
   );
 }
@@ -109,8 +148,7 @@ function ManualAccountForm({ onSave, onCancel, initial }) {
 }
 
 // ── Account Card ────────────────────────────────────────────────────────────
-function AccountCard({ acc, canManage, onEdit, onDeactivate, onSync, syncing }) {
-  const isPlaid = !!acc.plaid_account_id;
+function AccountCard({ acc, canManage, onEdit, onDeactivate }) {
   return (
     <div className="card">
       <div className="flex justify-between items-start">
@@ -119,8 +157,6 @@ function AccountCard({ acc, canManage, onEdit, onDeactivate, onSync, syncing }) 
           <p className="text-sm text-gray-500">
             {acc.institution}
             {acc.account_mask ? ` ••••${acc.account_mask}` : ''}
-            {isPlaid && <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">Plaid</span>}
-            {!isPlaid && <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">Manual</span>}
           </p>
         </div>
         <span className="text-2xl">🏧</span>
@@ -140,16 +176,9 @@ function AccountCard({ acc, canManage, onEdit, onDeactivate, onSync, syncing }) 
       </div>
       {canManage && (
         <div className="flex gap-2 mt-4 pt-3 border-t border-gray-100">
-          {isPlaid && (
-            <button className="text-xs btn-secondary py-1 px-2" onClick={() => onSync(acc.id)} disabled={syncing}>
-              {syncing ? '...' : '🔄 Sync'}
-            </button>
-          )}
-          {!isPlaid && (
-            <button className="text-xs btn-secondary py-1 px-2" onClick={() => onEdit(acc)}>
-              ✏️ Edit Balance
-            </button>
-          )}
+          <button className="text-xs btn-secondary py-1 px-2" onClick={() => onEdit(acc)}>
+            ✏️ Edit Balance
+          </button>
           <button className="text-xs text-red-600 hover:text-red-800 py-1 px-2" onClick={() => onDeactivate(acc.id)}>
             🗑 Remove
           </button>
@@ -162,74 +191,22 @@ function AccountCard({ acc, canManage, onEdit, onDeactivate, onSync, syncing }) 
 // ── Main Bank Page ──────────────────────────────────────────────────────────
 export default function BankPage({ user }) {
   const [balances, setBalances] = useState(null);
-  const [syncLog, setSyncLog] = useState([]);
-  const [syncing, setSyncing] = useState(false);
-  const [syncingId, setSyncingId] = useState(null);
   const [showAddManual, setShowAddManual] = useState(false);
   const [editingAccount, setEditingAccount] = useState(null);
-  const [tab, setTab] = useState('accounts'); // 'accounts' | 'history' | 'setup'
-  const [linkSuccess, setLinkSuccess] = useState('');
-  const [linkError, setLinkError] = useState('');
+  const [tab, setTab] = useState('accounts'); // 'accounts' | 'import' | 'setup'
+  const [statusMsg, setStatusMsg] = useState('');
+  const [statusError, setStatusError] = useState('');
 
   const canManage = ['admin', 'treasurer'].includes(user.role);
 
   const loadData = useCallback(async () => {
     try {
-      const [balRes, logRes] = await Promise.all([
-        bankAPI.balances(),
-        bankAPI.syncLog(),
-      ]);
+      const balRes = await bankAPI.balances();
       setBalances(balRes.data);
-      setSyncLog(logRes.data);
     } catch (err) { console.error(err); }
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
-
-  // Called after Plaid Link completes
-  const handlePlaidSuccess = async (public_token, metadata) => {
-    setLinkError('');
-    try {
-      const res = await bankAPI.exchangeToken({
-        public_token,
-        institution: metadata.institution,
-        accounts: metadata.accounts,
-      });
-      setLinkSuccess(`✅ ${res.data.count} account(s) from ${metadata.institution.name} linked successfully!`);
-      await loadData();
-    } catch (err) {
-      setLinkError(err.response?.data?.error || 'Failed to link bank account');
-    }
-  };
-
-  const handleSyncAll = async () => {
-    setSyncing(true);
-    setLinkError('');
-    try {
-      const res = await bankAPI.sync();
-      const results = res.data.results || [];
-      const ok = results.filter(r => !r.error).length;
-      const fail = results.filter(r => r.error).length;
-      setLinkSuccess(`Sync complete: ${ok} account(s) updated${fail ? `, ${fail} error(s)` : ''}`);
-      await loadData();
-    } catch (err) {
-      setLinkError(err.response?.data?.error || 'Sync failed');
-    }
-    setSyncing(false);
-  };
-
-  const handleSyncOne = async (accountId) => {
-    setSyncingId(accountId);
-    setLinkError('');
-    try {
-      await bankAPI.syncAccount(accountId);
-      await loadData();
-      setLinkSuccess('Account synced');
-    } catch (err) {
-      setLinkError(err.response?.data?.error || 'Sync failed');
-    }
-    setSyncingId(null);
-  };
 
   const handleDeactivate = async (accountId) => {
     if (!window.confirm('Remove this bank account? This will not delete transaction history.')) return;
@@ -237,57 +214,46 @@ export default function BankPage({ user }) {
       await bankAPI.deactivateAccount(accountId);
       await loadData();
     } catch (err) {
-      setLinkError(err.response?.data?.error || 'Failed to remove account');
+      setStatusError(err.response?.data?.error || 'Failed to remove account');
     }
   };
 
   const accounts = balances?.accounts || [];
-  const plaidAccounts = accounts.filter(a => a.plaid_account_id);
-  const manualAccounts = accounts.filter(a => !a.plaid_account_id);
 
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Bank Accounts</h2>
-        <div className="flex gap-2 items-center">
-          {canManage && plaidAccounts.length > 0 && (
-            <button className="btn-secondary text-sm" onClick={handleSyncAll} disabled={syncing}>
-              {syncing ? 'Syncing...' : '🔄 Sync All (Plaid)'}
-            </button>
-          )}
-          {canManage && (
-            <div className="flex gap-2">
-              <button className="btn-secondary text-sm" onClick={() => { setShowAddManual(true); setEditingAccount(null); }}>
-                ➕ Add Manually
-              </button>
-            </div>
-          )}
-        </div>
+        {canManage && (
+          <button className="btn-secondary text-sm" onClick={() => { setShowAddManual(true); setEditingAccount(null); }}>
+            ➕ Add Account
+          </button>
+        )}
       </div>
 
-      {linkSuccess && (
+      {statusMsg && (
         <div className="bg-green-50 text-green-700 border border-green-200 rounded-lg p-3 text-sm mb-4 flex justify-between">
-          {linkSuccess}
-          <button className="text-green-500 hover:text-green-700" onClick={() => setLinkSuccess('')}>✕</button>
+          {statusMsg}
+          <button className="text-green-500 hover:text-green-700" onClick={() => setStatusMsg('')}>✕</button>
         </div>
       )}
-      {linkError && (
+      {statusError && (
         <div className="bg-red-50 text-red-700 border border-red-200 rounded-lg p-3 text-sm mb-4 flex justify-between">
-          {linkError}
-          <button className="text-red-500 hover:text-red-700" onClick={() => setLinkError('')}>✕</button>
+          {statusError}
+          <button className="text-red-500 hover:text-red-700" onClick={() => setStatusError('')}>✕</button>
         </div>
       )}
 
       {/* Tab Nav */}
       <div className="flex gap-2 mb-6 border-b border-gray-200">
-        {['accounts', 'history', 'setup'].map(t => (
+        {['accounts', 'import', 'setup'].map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
             className={`pb-2 px-1 text-sm font-medium border-b-2 transition-colors ${tab === t ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
           >
             {t === 'accounts' && '🏦 Accounts'}
-            {t === 'history' && '📋 Sync History'}
+            {t === 'import' && '📥 Import CSV'}
             {t === 'setup' && '⚙️ Setup Guide'}
           </button>
         ))}
@@ -303,17 +269,17 @@ export default function BankPage({ user }) {
                 <div>
                   <p className="text-sm text-blue-700">Total Balance — All Accounts</p>
                   <p className="text-3xl font-bold text-blue-800">{fmt(balances.total_balance)}</p>
-                  <p className="text-xs text-blue-500 mt-1">{accounts.length} account{accounts.length !== 1 ? 's' : ''} ({plaidAccounts.length} via Plaid, {manualAccounts.length} manual)</p>
+                  <p className="text-xs text-blue-500 mt-1">{accounts.length} account{accounts.length !== 1 ? 's' : ''}</p>
                 </div>
                 <span className="text-4xl">🏦</span>
               </div>
             </div>
           )}
 
-          {/* Add Manual Form */}
+          {/* Add / Edit Form */}
           {canManage && (showAddManual || editingAccount) && (
             <div className="card mb-6 bg-gray-50 border border-gray-200">
-              <h3 className="font-bold text-gray-800 mb-3">{editingAccount ? '✏️ Edit Account' : '➕ Add Account Manually'}</h3>
+              <h3 className="font-bold text-gray-800 mb-3">{editingAccount ? '✏️ Edit Account' : '➕ Add Account'}</h3>
               <ManualAccountForm
                 initial={editingAccount}
                 onSave={() => { setShowAddManual(false); setEditingAccount(null); loadData(); }}
@@ -327,10 +293,10 @@ export default function BankPage({ user }) {
             <div className="card text-center py-12 text-gray-400">
               <p className="text-4xl mb-3">🏦</p>
               <p className="font-medium">No bank accounts yet</p>
-              <p className="text-sm mt-1">Connect via Plaid or add manually above</p>
+              <p className="text-sm mt-1">Add an account above, then import transactions from the CSV tab</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {accounts.map(acc => (
                 <AccountCard
                   key={acc.id}
@@ -338,64 +304,36 @@ export default function BankPage({ user }) {
                   canManage={canManage}
                   onEdit={setEditingAccount}
                   onDeactivate={handleDeactivate}
-                  onSync={handleSyncOne}
-                  syncing={syncingId === acc.id}
                 />
               ))}
-            </div>
-          )}
-
-          {/* Connect via Plaid */}
-          {canManage && (
-            <div className="card bg-indigo-50 border border-indigo-200">
-              <div className="flex items-start gap-4">
-                <span className="text-3xl">🔗</span>
-                <div className="flex-1">
-                  <h3 className="font-bold text-indigo-900 mb-1">Connect Any Bank via Plaid</h3>
-                  <p className="text-sm text-indigo-700 mb-3">
-                    Plaid supports 12,000+ financial institutions — any bank, credit union, or financial account your church uses.
-                    Balances and transactions sync automatically.
-                  </p>
-                  <PlaidLinkButton onSuccess={handlePlaidSuccess} />
-                </div>
-              </div>
             </div>
           )}
         </>
       )}
 
-      {/* ── SYNC HISTORY TAB ── */}
-      {tab === 'history' && (
-        <div className="card">
-          <h3 className="text-lg font-bold text-gray-900 mb-4">Plaid Sync History</h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-gray-500 border-b">
-                  <th className="pb-2 pr-4">Date</th>
-                  <th className="pb-2 pr-4">Account</th>
-                  <th className="pb-2 pr-4">Status</th>
-                  <th className="pb-2 pr-4">Transactions Found</th>
-                  <th className="pb-2">Error</th>
-                </tr>
-              </thead>
-              <tbody>
-                {syncLog.map(entry => (
-                  <tr key={entry.id} className="border-b last:border-0">
-                    <td className="py-2 pr-4 text-gray-600 whitespace-nowrap">{new Date(entry.synced_at).toLocaleString()}</td>
-                    <td className="py-2 pr-4 text-gray-900">{entry.account_name || '—'}</td>
-                    <td className="py-2 pr-4">
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${entry.status === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                        {entry.status}
-                      </span>
-                    </td>
-                    <td className="py-2 pr-4 text-gray-600">{entry.transactions_synced || 0}</td>
-                    <td className="py-2 text-red-500 text-xs">{entry.error_message || '—'}</td>
-                  </tr>
-                ))}
-                {syncLog.length === 0 && (
-                  <tr><td colSpan="5" className="py-8 text-center text-gray-400">No sync history yet</td></tr>
-                )}
+      {/* ── IMPORT CSV TAB ── */}
+      {tab === 'import' && (
+        <div className="space-y-4">
+          {canManage ? (
+            <CsvImportPanel
+              accounts={accounts}
+              onImported={() => { loadData(); setStatusMsg('Transactions imported — check the Transactions page.'); }}
+            />
+          ) : (
+            <p className="text-gray-500 text-sm">Only admins and treasurers can import transactions.</p>
+          )}
+          <div className="card bg-gray-50 border border-gray-200">
+            <h3 className="font-bold text-gray-800 mb-2">📄 CSV Format</h3>
+            <p className="text-sm text-gray-600 mb-2">Your CSV must have these column headers (spelling/case flexible):</p>
+            <table className="text-sm w-full">
+              <thead><tr className="text-left text-gray-500 border-b"><th className="pb-1 pr-4">Column</th><th className="pb-1 pr-4">Required</th><th className="pb-1">Notes</th></tr></thead>
+              <tbody className="text-gray-700">
+                <tr className="border-b"><td className="py-1 pr-4 font-mono">date</td><td className="pr-4">Yes</td><td>MM/DD/YYYY, YYYY-MM-DD, or MM-DD-YYYY</td></tr>
+                <tr className="border-b"><td className="py-1 pr-4 font-mono">amount</td><td className="pr-4">Yes</td><td>Positive or negative number. Negative = expense.</td></tr>
+                <tr className="border-b"><td className="py-1 pr-4 font-mono">description</td><td className="pr-4">No</td><td>Transaction description or memo</td></tr>
+                <tr className="border-b"><td className="py-1 pr-4 font-mono">type</td><td className="pr-4">No</td><td>"income" or "expense" (inferred from sign if omitted)</td></tr>
+                <tr className="border-b"><td className="py-1 pr-4 font-mono">check_number</td><td className="pr-4">No</td><td>Check number if applicable</td></tr>
+                <tr><td className="py-1 pr-4 font-mono">notes</td><td className="pr-4">No</td><td>Additional notes</td></tr>
               </tbody>
             </table>
           </div>
@@ -405,46 +343,36 @@ export default function BankPage({ user }) {
       {/* ── SETUP GUIDE TAB ── */}
       {tab === 'setup' && (
         <div className="space-y-4">
-          <div className="card bg-blue-50 border border-blue-200">
-            <h3 className="font-bold text-blue-900 mb-3">🔗 Plaid Setup (Automatic Bank Sync)</h3>
-            <p className="text-sm text-blue-800 mb-4">
-              Plaid is the industry-standard banking API used by Venmo, Robinhood, and thousands of financial apps.
-              It supports <strong>12,000+ banks and credit unions</strong> — connect whatever bank(s) your church uses.
-            </p>
-            <ol className="text-sm text-blue-800 space-y-2 list-decimal list-inside">
-              <li>Create a free account at <a href="https://plaid.com" target="_blank" rel="noreferrer" className="underline font-medium">plaid.com</a></li>
-              <li>From the Plaid dashboard, get your <strong>Client ID</strong> and <strong>Secret</strong></li>
-              <li>Open <code className="bg-blue-100 px-1 rounded">server/.env</code> and set:
-                <pre className="mt-2 bg-blue-100 rounded p-3 text-xs overflow-auto">{`PLAID_CLIENT_ID=your_client_id_here
-PLAID_SECRET=your_secret_here
-PLAID_ENV=sandbox   # change to 'production' when ready`}</pre>
-              </li>
-              <li>Restart the server, then return to the <strong>Accounts</strong> tab</li>
-              <li>Click <strong>"Connect a Bank Account"</strong> — select any bank, log in securely</li>
-              <li>Use <strong>"Sync All"</strong> to pull live balances at any time</li>
+          <div className="card bg-indigo-50 border border-indigo-200">
+            <h3 className="font-bold text-indigo-900 mb-3">🏦 How to Get a CSV from Your Bank</h3>
+            <p className="text-sm text-indigo-800 mb-3">Every major US bank lets you download transactions as CSV from your online banking portal:</p>
+            <ol className="text-sm text-indigo-800 space-y-2 list-decimal list-inside">
+              <li>Log in to your bank's website</li>
+              <li>Navigate to your account's transaction history</li>
+              <li>Set the date range you want to import</li>
+              <li>Look for a <strong>"Download"</strong> or <strong>"Export"</strong> button — choose <strong>CSV</strong></li>
+              <li>Come back here, select the account, and upload the file</li>
             </ol>
           </div>
 
           <div className="card bg-gray-50 border border-gray-200">
-            <h3 className="font-bold text-gray-800 mb-3">🖊️ Manual Accounts (No Plaid Needed)</h3>
+            <h3 className="font-bold text-gray-800 mb-3">🖊️ Manual Balance Updates</h3>
             <p className="text-sm text-gray-700 mb-2">
-              If you prefer not to connect Plaid, you can add accounts manually and update balances yourself.
-              This works for any bank, credit union, investment account, or cash fund.
+              You can also add accounts and update their balances manually without importing transactions.
+              This is useful for accounts you reconcile monthly.
             </p>
             <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
-              <li>Go to the <strong>Accounts</strong> tab and click <strong>"Add Manually"</strong></li>
-              <li>Enter the institution name, account nickname, and current balance</li>
-              <li>Click <strong>"Edit Balance"</strong> on any manual account to update it over time</li>
+              <li>Go to the <strong>Accounts</strong> tab and click <strong>"Add Account"</strong></li>
+              <li>Click <strong>"Edit Balance"</strong> on any account to update it</li>
             </ul>
           </div>
 
           <div className="card bg-yellow-50 border border-yellow-200">
-            <h3 className="font-bold text-yellow-900 mb-2">⚠️ Security Notes</h3>
+            <h3 className="font-bold text-yellow-900 mb-2">⚠️ Tips</h3>
             <ul className="text-sm text-yellow-800 space-y-1 list-disc list-inside">
-              <li>Plaid uses bank-grade encryption — your login credentials are never stored</li>
-              <li>Use Plaid's <strong>sandbox</strong> environment for testing (uses fake credentials)</li>
-              <li>In production, rotate your Plaid secret periodically</li>
-              <li>Only <strong>Admin</strong> and <strong>Treasurer</strong> roles can add/remove accounts or trigger syncs</li>
+              <li>Import is additive — duplicate transactions are not detected automatically. Avoid importing the same date range twice.</li>
+              <li>After import, review transactions on the <strong>Transactions</strong> page to assign categories and funds.</li>
+              <li>Only <strong>Admin</strong> and <strong>Treasurer</strong> roles can import transactions.</li>
             </ul>
           </div>
         </div>

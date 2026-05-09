@@ -84,14 +84,10 @@ export const budgetsAPI = {
 export const bankAPI = {
   accounts: () => api.get('/bank/accounts'),
   balances: () => api.get('/bank/balances'),
-  linkToken: () => api.post('/bank/link-token'),
-  exchangeToken: (data) => api.post('/bank/exchange-token', data),
-  sync: () => api.post('/bank/sync'),
-  syncAccount: (id) => api.post(`/bank/sync/${id}`),
-  syncLog: () => api.get('/bank/sync-log'),
   createAccount: (data) => api.post('/bank/accounts', data),
   updateAccount: (id, data) => api.put(`/bank/accounts/${id}`, data),
   deactivateAccount: (id) => api.delete(`/bank/accounts/${id}`),
+  importCsv: (formData) => api.post('/bank/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
 };
 
 // ── Reports ──────────────────────────────────────────────
