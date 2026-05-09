@@ -6,13 +6,14 @@ const db = require('../models/db');
 const { authenticate, authorize } = require('../middleware/auth');
 const { requireTenant } = require('../middleware/tenant');
 const { logAudit } = require('../models/auditLog');
-const { sendMfaCode } = require('../services/email');
+const { sendMfaCode, sendPasswordResetEmail } = require('../services/email');
 
 const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production'
   ? (() => { throw new Error('JWT_SECRET must be set in production'); })()
   : 'dev-secret');
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h';
 const MFA_CODE_EXPIRY_MINUTES = 10;
+const PASSWORD_RESET_EXPIRY_MINUTES = 30;
 const MIN_ADMINS = 2;
 
 // ── Helper: count active admins within a tenant ──────────
@@ -26,6 +27,16 @@ async function countActiveAdmins(tenantId) {
 // ── MFA helpers ─────────────────────────────────────────
 function generateMfaCode() {
   return crypto.randomInt(100000, 999999).toString();
+}
+
+function hashResetToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+function buildPasswordResetUrl(token) {
+  const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const baseUrl = appUrl.endsWith('/app') ? appUrl : `${appUrl}/app`;
+  return `${baseUrl}/login?reset_token=${encodeURIComponent(token)}`;
 }
 
 // POST /api/auth/login — validates credentials, sends MFA code via email
@@ -109,6 +120,81 @@ router.post('/verify-mfa', async (req, res) => {
   } catch (err) {
     console.error('MFA verify error:', err);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/auth/forgot-password — send a time-limited password reset link
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const email = String(req.body.email || '').trim().toLowerCase();
+    if (!email) return res.status(400).json({ error: 'Email is required' });
+
+    const genericMessage = 'If an active account exists for that email, a reset link has been sent.';
+    const user = await db('users').where({ email, is_active: true }).first();
+
+    if (user) {
+      await db('password_reset_tokens').where({ user_id: user.id, used: false }).update({ used: true });
+
+      const token = crypto.randomBytes(32).toString('hex');
+      const tokenHash = hashResetToken(token);
+      const expiresAt = new Date(Date.now() + PASSWORD_RESET_EXPIRY_MINUTES * 60 * 1000);
+
+      await db('password_reset_tokens').insert({
+        user_id: user.id,
+        token_hash: tokenHash,
+        expires_at: expiresAt,
+      });
+
+      await sendPasswordResetEmail(user.email, buildPasswordResetUrl(token));
+
+      await logAudit({
+        entityType: 'user', entityId: user.id, action: 'password_reset_requested',
+        newValues: { email: user.email }, userName: user.name, ipAddress: req.ip,
+        tenantId: user.tenant_id || null,
+      });
+    }
+
+    res.json({ message: genericMessage });
+  } catch (err) {
+    console.error('Forgot password error:', err);
+    res.status(500).json({ error: 'Could not process password reset request' });
+  }
+});
+
+// POST /api/auth/reset-password — exchange reset token for a new password
+router.post('/reset-password', async (req, res) => {
+  try {
+    const token = String(req.body.token || '').trim();
+    const newPassword = String(req.body.new_password || '');
+
+    if (!token || !newPassword) return res.status(400).json({ error: 'Reset token and new password are required' });
+    if (newPassword.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+
+    const tokenHash = hashResetToken(token);
+    const reset = await db('password_reset_tokens')
+      .where({ token_hash: tokenHash, used: false })
+      .where('expires_at', '>', new Date())
+      .first();
+
+    if (!reset) return res.status(400).json({ error: 'Reset link is invalid or expired' });
+
+    const user = await db('users').where({ id: reset.user_id, is_active: true }).first();
+    if (!user) return res.status(400).json({ error: 'Reset link is invalid or expired' });
+
+    const hash = await bcrypt.hash(newPassword, 10);
+    await db('users').where({ id: user.id }).update({ password_hash: hash });
+    await db('password_reset_tokens').where({ user_id: user.id, used: false }).update({ used: true });
+    await db('mfa_codes').where({ user_id: user.id, used: false }).update({ used: true });
+
+    await logAudit({
+      entityType: 'user', entityId: user.id, action: 'password_reset_completed',
+      userName: user.name, ipAddress: req.ip, tenantId: user.tenant_id || null,
+    });
+
+    res.json({ message: 'Password reset successfully. You can now sign in.' });
+  } catch (err) {
+    console.error('Reset password error:', err);
+    res.status(500).json({ error: 'Could not reset password' });
   }
 });
 

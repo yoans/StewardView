@@ -7,6 +7,8 @@ exports.seed = async function (knex) {
   }
   // Clear tables in order
   await knex('monthly_reports').del();
+  try { await knex('password_reset_tokens').del(); } catch { /* ok */ }
+  try { await knex('mfa_codes').del(); } catch { /* ok */ }
   await knex('audit_log').del();
   await knex('budgets').del();
   await knex('fund_transactions').del();

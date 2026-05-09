@@ -1,21 +1,41 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { authAPI } from '../services/api';
 
 export default function LoginPage({ onLogin }) {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [mode, setMode] = useState('login'); // 'login' | 'signup'
-  const [step, setStep] = useState('credentials'); // 'credentials' | 'mfa'
+  const [step, setStep] = useState('credentials'); // 'credentials' | 'mfa' | 'forgot' | 'reset'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetConfirm, setResetConfirm] = useState('');
+  const [resetToken, setResetToken] = useState('');
   const [name, setName] = useState('');
   const [mfaToken, setMfaToken] = useState('');
   const [mfaCode, setMfaCode] = useState(['', '', '', '', '', '']);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
   const codeRefs = useRef([]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const token = params.get('reset_token');
+    if (token) {
+      setResetToken(token);
+      setStep('reset');
+      setMode('login');
+      setError('');
+      setNotice('');
+    }
+  }, [location.search]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setNotice('');
     setLoading(true);
     try {
       if (mode === 'login') {
@@ -59,6 +79,45 @@ export default function LoginPage({ onLogin }) {
     }
   };
 
+  const handleForgotSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setNotice('');
+    if (!email.trim()) { setError('Email is required'); return; }
+    setLoading(true);
+    try {
+      const res = await authAPI.forgotPassword(email);
+      setNotice(res.data.message || 'If an active account exists for that email, a reset link has been sent.');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not send reset link');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setNotice('');
+    if (resetPassword.length < 8) { setError('Password must be at least 8 characters'); return; }
+    if (resetPassword !== resetConfirm) { setError('Passwords do not match'); return; }
+    setLoading(true);
+    try {
+      const res = await authAPI.resetPassword(resetToken, resetPassword);
+      setNotice(res.data.message || 'Password reset successfully. You can now sign in.');
+      setPassword('');
+      setResetPassword('');
+      setResetConfirm('');
+      setResetToken('');
+      setStep('credentials');
+      navigate('/login', { replace: true });
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not reset password');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleCodeChange = (index, value) => {
     // Only allow digits
     const digit = value.replace(/\D/g, '').slice(-1);
@@ -93,6 +152,18 @@ export default function LoginPage({ onLogin }) {
     setMfaToken('');
     setMfaCode(['', '', '', '', '', '']);
     setError('');
+  };
+
+  const handleBackToCredentials = () => {
+    setStep('credentials');
+    setError('');
+    setNotice('');
+    setResetPassword('');
+    setResetConfirm('');
+    if (resetToken) {
+      setResetToken('');
+      navigate('/login', { replace: true });
+    }
   };
 
   return (
@@ -156,23 +227,97 @@ export default function LoginPage({ onLogin }) {
               </button>
             </div>
           </>
+        ) : step === 'forgot' ? (
+          <>
+            <div className="text-center mb-6">
+              <h2 className="text-lg font-semibold text-gray-900">Reset your password</h2>
+              <p className="text-gray-500 text-sm mt-1">Enter your email and we will send a secure reset link.</p>
+            </div>
+
+            <form onSubmit={handleForgotSubmit} className="space-y-4">
+              {error && <div className="bg-red-50 text-red-700 p-3 rounded-lg text-sm">{error}</div>}
+              {notice && <div className="bg-green-50 text-green-700 p-3 rounded-lg text-sm">{notice}</div>}
+
+              <div>
+                <label className="label">Email</label>
+                <input
+                  type="email" className="input" value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@church.org" required
+                />
+              </div>
+
+              <button type="submit" className="btn-primary w-full" disabled={loading}>
+                {loading ? 'Sending...' : 'Send Reset Link'}
+              </button>
+            </form>
+
+            <div className="mt-4 text-center">
+              <button className="text-sm text-blue-600 hover:text-blue-800" onClick={handleBackToCredentials}>
+                Back to sign in
+              </button>
+            </div>
+          </>
+        ) : step === 'reset' ? (
+          <>
+            <div className="text-center mb-6">
+              <h2 className="text-lg font-semibold text-gray-900">Choose a new password</h2>
+              <p className="text-gray-500 text-sm mt-1">Use at least 8 characters.</p>
+            </div>
+
+            <form onSubmit={handleResetSubmit} className="space-y-4">
+              {error && <div className="bg-red-50 text-red-700 p-3 rounded-lg text-sm">{error}</div>}
+              {notice && <div className="bg-green-50 text-green-700 p-3 rounded-lg text-sm">{notice}</div>}
+
+              <div>
+                <label className="label">New Password</label>
+                <input
+                  type="password" className="input" value={resetPassword}
+                  onChange={(e) => setResetPassword(e.target.value)}
+                  placeholder="••••••••" required
+                />
+              </div>
+
+              <div>
+                <label className="label">Confirm Password</label>
+                <input
+                  type="password" className="input" value={resetConfirm}
+                  onChange={(e) => setResetConfirm(e.target.value)}
+                  placeholder="••••••••" required
+                />
+              </div>
+
+              <button type="submit" className="btn-primary w-full" disabled={loading}>
+                {loading ? 'Resetting...' : 'Reset Password'}
+              </button>
+            </form>
+
+            <div className="mt-4 text-center">
+              <button className="text-sm text-blue-600 hover:text-blue-800" onClick={handleBackToCredentials}>
+                Back to sign in
+              </button>
+            </div>
+          </>
         ) : (
           <>
             {/* Toggle Login / Sign Up */}
             <div className="flex mb-6 bg-gray-100 rounded-lg p-1">
               <button
                 className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${mode === 'login' ? 'bg-white shadow text-blue-700' : 'text-gray-500'}`}
-                onClick={() => { setMode('login'); setError(''); }}
+                  onClick={() => { setMode('login'); setError(''); setNotice(''); }}
               >Sign In</button>
               <button
                 className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${mode === 'signup' ? 'bg-white shadow text-blue-700' : 'text-gray-500'}`}
-                onClick={() => { setMode('signup'); setError(''); }}
+                  onClick={() => { setMode('signup'); setError(''); setNotice(''); }}
               >Sign Up</button>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && (
                 <div className="bg-red-50 text-red-700 p-3 rounded-lg text-sm">{error}</div>
+              )}
+              {notice && (
+                <div className="bg-green-50 text-green-700 p-3 rounded-lg text-sm">{notice}</div>
               )}
 
               {mode === 'signup' && (
@@ -208,6 +353,17 @@ export default function LoginPage({ onLogin }) {
                 {loading ? (mode === 'login' ? 'Signing in...' : 'Creating account...') : (mode === 'login' ? 'Sign In' : 'Create Account')}
               </button>
             </form>
+
+            {mode === 'login' && (
+              <div className="mt-3 text-center">
+                <button
+                  className="text-sm text-blue-600 hover:text-blue-800"
+                  onClick={() => { setStep('forgot'); setError(''); setNotice(''); }}
+                >
+                  Forgot password?
+                </button>
+              </div>
+            )}
 
             {mode === 'signup' && (
               <p className="mt-4 text-xs text-center text-gray-500">

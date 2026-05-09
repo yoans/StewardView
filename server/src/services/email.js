@@ -25,4 +25,28 @@ async function sendMfaCode(toEmail, code) {
   });
 }
 
-module.exports = { sendMfaCode };
+async function sendPasswordResetEmail(toEmail, resetUrl) {
+  await resend.emails.send({
+    from: FROM_ADDRESS,
+    to: toEmail,
+    subject: 'StewardView — Reset your password',
+    html: `
+      <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
+        <h2 style="color: #1e3a5f;">Reset your StewardView password</h2>
+        <p>We received a request to reset your password.</p>
+        <p style="margin: 24px 0;">
+          <a href="${resetUrl}" style="background: #1d4ed8; color: white; padding: 12px 18px;
+             border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">
+            Reset Password
+          </a>
+        </p>
+        <p style="color: #374151; font-size: 14px;">This link expires in 30 minutes.</p>
+        <p style="color: #6b7280; font-size: 14px;">
+          If you did not request a password reset, you can safely ignore this email.
+        </p>
+      </div>
+    `,
+  });
+}
+
+module.exports = { sendMfaCode, sendPasswordResetEmail };
