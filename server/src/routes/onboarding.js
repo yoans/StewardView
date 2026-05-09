@@ -62,6 +62,7 @@ router.post('/register', async (req, res) => {
       plan: plan || 'free',
       plan_amount: parseFloat(amount) || 0,
       admin_email: adminEmail,
+      contact_email: adminEmail,
     });
 
     // Create admin user

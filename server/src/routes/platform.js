@@ -47,7 +47,11 @@ router.get('/tenants/:id', guard, async (req, res) => {
 // PUT /api/platform/tenants/:id — update tenant (status, plan, notes, branding)
 router.put('/tenants/:id', guard, async (req, res) => {
   try {
-    const { status, plan, plan_amount, primary_color, accent_color, logo_url, notes, name } = req.body;
+    const {
+      status, plan, plan_amount, primary_color, accent_color, logo_url, notes, name,
+      contact_email, phone, website, address_line1, address_line2, city, state,
+      postal_code, country, profile_image_url,
+    } = req.body;
     const updates = {};
     if (name !== undefined) updates.name = name;
     if (status !== undefined) {
@@ -59,6 +63,16 @@ router.put('/tenants/:id', guard, async (req, res) => {
     if (primary_color !== undefined) updates.primary_color = primary_color;
     if (accent_color !== undefined) updates.accent_color = accent_color;
     if (logo_url !== undefined) updates.logo_url = logo_url;
+    if (contact_email !== undefined) updates.contact_email = contact_email;
+    if (phone !== undefined) updates.phone = phone;
+    if (website !== undefined) updates.website = website;
+    if (address_line1 !== undefined) updates.address_line1 = address_line1;
+    if (address_line2 !== undefined) updates.address_line2 = address_line2;
+    if (city !== undefined) updates.city = city;
+    if (state !== undefined) updates.state = state;
+    if (postal_code !== undefined) updates.postal_code = postal_code;
+    if (country !== undefined) updates.country = country;
+    if (profile_image_url !== undefined) updates.profile_image_url = profile_image_url;
     if (notes !== undefined) updates.notes = notes;
 
     await db('tenants').where({ id: req.params.id }).update(updates);

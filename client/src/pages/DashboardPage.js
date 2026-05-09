@@ -3,7 +3,20 @@ import { reportsAPI } from '../services/api';
 
 const fmt = (n) => parseFloat(n || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
-export default function DashboardPage() {
+function initials(name) {
+  return (name || 'SV').split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
+}
+
+function formatAddress(tenant) {
+  if (!tenant) return '';
+  return [
+    tenant.address_line1,
+    tenant.address_line2,
+    [tenant.city, tenant.state, tenant.postal_code].filter(Boolean).join(', '),
+  ].filter(Boolean).join(' · ');
+}
+
+export default function DashboardPage({ tenant }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -19,6 +32,32 @@ export default function DashboardPage() {
 
   return (
     <div>
+      {tenant && (
+        <div className="card mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="h-16 w-16 rounded-lg bg-blue-50 border border-blue-100 overflow-hidden flex items-center justify-center text-blue-800 font-bold text-lg">
+              {tenant.profile_image_url ? (
+                <img src={tenant.profile_image_url} alt={tenant.name} className="h-full w-full object-cover" />
+              ) : tenant.logo_url ? (
+                <img src={tenant.logo_url} alt={tenant.name} className="h-full w-full object-contain p-1" />
+              ) : (
+                <span>{initials(tenant.name)}</span>
+              )}
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Organization</p>
+              <h2 className="text-2xl font-bold text-gray-900">{tenant.name}</h2>
+              <p className="text-sm text-gray-500 mt-1">{formatAddress(tenant) || 'Organization profile details can be managed by an admin.'}</p>
+            </div>
+          </div>
+          <div className="text-sm text-gray-600 md:text-right space-y-1">
+            {tenant.contact_email && <p>{tenant.contact_email}</p>}
+            {tenant.phone && <p>{tenant.phone}</p>}
+            {tenant.website && <p>{tenant.website}</p>}
+          </div>
+        </div>
+      )}
+
       <h2 className="text-2xl font-bold text-gray-900 mb-6">Financial Dashboard</h2>
 
       {/* Summary Cards */}

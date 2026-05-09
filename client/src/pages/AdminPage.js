@@ -10,9 +10,27 @@ const ROLE_COLORS = {
   viewer: 'bg-gray-100 text-gray-800',
 };
 
-export default function AdminPage({ user }) {
+const emptyTenantProfile = {
+  name: '',
+  contact_email: '',
+  phone: '',
+  website: '',
+  address_line1: '',
+  address_line2: '',
+  city: '',
+  state: '',
+  postal_code: '',
+  country: 'US',
+  profile_image_url: '',
+  logo_url: '',
+  primary_color: '#1e3a8a',
+  accent_color: '#c7a10e',
+};
+
+export default function AdminPage({ user, tenant, onTenantUpdated }) {
   const [users, setUsers] = useState([]);
   const [backups, setBackups] = useState([]);
+  const [tenantProfile, setTenantProfile] = useState({ ...emptyTenantProfile });
   const [tab, setTab] = useState('users'); // 'users' | 'backups' | 'create'
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -40,9 +58,18 @@ export default function AdminPage({ user }) {
     } catch { /* ignore if table doesn't exist yet */ }
   };
 
+  const loadTenantProfile = async () => {
+    try {
+      const res = await authAPI.getTenant();
+      setTenantProfile({ ...emptyTenantProfile, ...res.data });
+    } catch (err) {
+      setError('Failed to load organization profile');
+    }
+  };
+
   useEffect(() => {
     setLoading(true);
-    Promise.all([loadUsers(), loadBackups()]).finally(() => setLoading(false));
+    Promise.all([loadUsers(), loadBackups(), loadTenantProfile()]).finally(() => setLoading(false));
   }, []);
 
   const handleRoleChange = async (userId, newRole) => {
@@ -97,6 +124,23 @@ export default function AdminPage({ user }) {
     }
   };
 
+  const handleTenantField = (field, value) => {
+    setTenantProfile(current => ({ ...current, [field]: value }));
+  };
+
+  const handleSaveTenantProfile = async (e) => {
+    e.preventDefault();
+    setError(''); setSuccess('');
+    try {
+      const res = await authAPI.updateTenant(tenantProfile);
+      setTenantProfile({ ...emptyTenantProfile, ...res.data });
+      onTenantUpdated?.(res.data);
+      setSuccess('Organization profile updated');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to update organization profile');
+    }
+  };
+
   const handleDownloadBackup = async (id) => {
     try {
       const res = await backupsAPI.download(id);
@@ -128,6 +172,7 @@ export default function AdminPage({ user }) {
         <h2 className="text-2xl font-bold text-gray-900">Administration</h2>
         <div className="flex gap-2">
           <button className={tab === 'users' ? 'btn-primary text-sm' : 'btn-secondary text-sm'} onClick={() => setTab('users')}>Users</button>
+          <button className={tab === 'organization' ? 'btn-primary text-sm' : 'btn-secondary text-sm'} onClick={() => setTab('organization')}>Organization</button>
           <button className={tab === 'create' ? 'btn-primary text-sm' : 'btn-secondary text-sm'} onClick={() => setTab('create')}>Add User</button>
           <button className={tab === 'backups' ? 'btn-primary text-sm' : 'btn-secondary text-sm'} onClick={() => setTab('backups')}>Backups</button>
         </div>
@@ -195,6 +240,117 @@ export default function AdminPage({ user }) {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* Organization Tab */}
+          {tab === 'organization' && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <form onSubmit={handleSaveTenantProfile} className="card lg:col-span-2 space-y-4">
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">Organization Profile</h3>
+                  <p className="text-sm text-gray-500 mt-1">These details are shown to everyone in your organization.</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="md:col-span-2">
+                    <label className="label">Organization Name</label>
+                    <input type="text" className="input" value={tenantProfile.name} onChange={e => handleTenantField('name', e.target.value)} required />
+                  </div>
+                  <div>
+                    <label className="label">Contact Email</label>
+                    <input type="email" className="input" value={tenantProfile.contact_email || ''} onChange={e => handleTenantField('contact_email', e.target.value)} placeholder="office@example.org" />
+                  </div>
+                  <div>
+                    <label className="label">Phone</label>
+                    <input type="tel" className="input" value={tenantProfile.phone || ''} onChange={e => handleTenantField('phone', e.target.value)} placeholder="(555) 123-4567" />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="label">Website</label>
+                    <input type="url" className="input" value={tenantProfile.website || ''} onChange={e => handleTenantField('website', e.target.value)} placeholder="https://example.org" />
+                  </div>
+                </div>
+
+                <div className="border-t pt-4">
+                  <h4 className="text-sm font-semibold text-gray-800 mb-3">Address</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2">
+                      <label className="label">Street Address</label>
+                      <input type="text" className="input" value={tenantProfile.address_line1 || ''} onChange={e => handleTenantField('address_line1', e.target.value)} placeholder="123 Main Street" />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="label">Address Line 2</label>
+                      <input type="text" className="input" value={tenantProfile.address_line2 || ''} onChange={e => handleTenantField('address_line2', e.target.value)} placeholder="Suite, building, or campus" />
+                    </div>
+                    <div>
+                      <label className="label">City</label>
+                      <input type="text" className="input" value={tenantProfile.city || ''} onChange={e => handleTenantField('city', e.target.value)} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="label">State</label>
+                        <input type="text" className="input" value={tenantProfile.state || ''} onChange={e => handleTenantField('state', e.target.value)} />
+                      </div>
+                      <div>
+                        <label className="label">ZIP</label>
+                        <input type="text" className="input" value={tenantProfile.postal_code || ''} onChange={e => handleTenantField('postal_code', e.target.value)} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t pt-4">
+                  <h4 className="text-sm font-semibold text-gray-800 mb-3">Images and Colors</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="label">Profile Image URL</label>
+                      <input type="url" className="input" value={tenantProfile.profile_image_url || ''} onChange={e => handleTenantField('profile_image_url', e.target.value)} placeholder="https://..." />
+                    </div>
+                    <div>
+                      <label className="label">Logo URL</label>
+                      <input type="url" className="input" value={tenantProfile.logo_url || ''} onChange={e => handleTenantField('logo_url', e.target.value)} placeholder="https://..." />
+                    </div>
+                    <div>
+                      <label className="label">Primary Color</label>
+                      <input type="color" className="input h-11 p-1" value={tenantProfile.primary_color || '#1e3a8a'} onChange={e => handleTenantField('primary_color', e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="label">Accent Color</label>
+                      <input type="color" className="input h-11 p-1" value={tenantProfile.accent_color || '#c7a10e'} onChange={e => handleTenantField('accent_color', e.target.value)} />
+                    </div>
+                  </div>
+                </div>
+
+                <button type="submit" className="btn-primary">Save Organization Profile</button>
+              </form>
+
+              <div className="card h-fit">
+                <p className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Preview</p>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="h-14 w-14 rounded-lg bg-blue-50 border border-blue-100 overflow-hidden flex items-center justify-center text-blue-800 font-bold">
+                    {tenantProfile.profile_image_url ? (
+                      <img src={tenantProfile.profile_image_url} alt="Organization profile" className="h-full w-full object-cover" />
+                    ) : tenantProfile.logo_url ? (
+                      <img src={tenantProfile.logo_url} alt="Organization logo" className="h-full w-full object-contain p-1" />
+                    ) : (
+                      <span>{(tenantProfile.name || tenant?.name || 'SV').split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase()}</span>
+                    )}
+                  </div>
+                  <div>
+                    <p className="font-bold text-gray-900">{tenantProfile.name || tenant?.name}</p>
+                    <p className="text-xs text-gray-500">{tenantProfile.contact_email || 'No contact email set'}</p>
+                  </div>
+                </div>
+                <div className="space-y-2 text-sm text-gray-600">
+                  {tenantProfile.phone && <p>{tenantProfile.phone}</p>}
+                  {tenantProfile.website && <p>{tenantProfile.website}</p>}
+                  {tenantProfile.address_line1 && <p>{tenantProfile.address_line1}</p>}
+                  {tenantProfile.address_line2 && <p>{tenantProfile.address_line2}</p>}
+                  {(tenantProfile.city || tenantProfile.state || tenantProfile.postal_code) && (
+                    <p>{[tenantProfile.city, tenantProfile.state, tenantProfile.postal_code].filter(Boolean).join(', ')}</p>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 

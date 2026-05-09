@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
@@ -128,6 +128,14 @@ function App() {
   const [tenant, setTenant] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const applyTenant = useCallback((tenantData) => {
+    if (!tenantData) return;
+    setTenant(tenantData);
+    if (tenantData.primary_color) document.documentElement.style.setProperty('--color-primary', tenantData.primary_color);
+    if (tenantData.accent_color) document.documentElement.style.setProperty('--color-accent', tenantData.accent_color);
+    document.title = `${tenantData.name} — Finance`;
+  }, []);
+
   useEffect(() => {
     const stored = localStorage.getItem('sv_user');
     if (stored) {
@@ -138,21 +146,15 @@ function App() {
     setLoading(false);
   }, []);
 
-  // Load tenant branding after login
+  // Load tenant profile and branding after login
   useEffect(() => {
     if (user && !user.is_platform_admin) {
       authAPI.me().then(res => {
         const t = res.data?.tenant;
-        if (t) {
-          setTenant(t);
-          // Apply tenant brand colors as CSS variables
-          if (t.primary_color) document.documentElement.style.setProperty('--color-primary', t.primary_color);
-          if (t.accent_color) document.documentElement.style.setProperty('--color-accent', t.accent_color);
-          document.title = `${t.name} — Finance`;
-        }
+        if (t) applyTenant(t);
       }).catch(() => {});
     }
-  }, [user]);
+  }, [applyTenant, user]);
 
   const handleLogin = (userData, token) => {
     localStorage.setItem('sv_token', token);
@@ -188,7 +190,7 @@ function App() {
           user ? (
             <Layout user={user} tenant={tenant} onLogout={handleLogout}>
               <Routes>
-                <Route path="/" element={<DashboardPage />} />
+                <Route path="/" element={<DashboardPage tenant={tenant} />} />
                 <Route path="/transactions" element={<TransactionsPage user={user} />} />
                 <Route path="/funds" element={<FundsPage user={user} />} />
                 <Route path="/budget" element={<BudgetPage user={user} />} />
@@ -196,7 +198,7 @@ function App() {
                 <Route path="/reports" element={<ReportsPage user={user} />} />
                 <Route path="/audit" element={<AuditPage />} />
                 <Route path="/givelify" element={<GivelifyPage user={user} />} />
-                <Route path="/admin" element={<AdminPage user={user} />} />
+                <Route path="/admin" element={<AdminPage user={user} tenant={tenant} onTenantUpdated={applyTenant} />} />
               </Routes>
             </Layout>
           ) : <Navigate to="/login" />

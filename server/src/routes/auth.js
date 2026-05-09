@@ -209,9 +209,73 @@ router.get('/me', authenticate, async (req, res) => {
   let tenant = null;
   if (user?.tenant_id) {
     tenant = await db('tenants').where({ id: user.tenant_id })
-      .select('id', 'name', 'slug', 'status', 'plan', 'primary_color', 'accent_color', 'logo_url').first();
+      .select(
+        'id', 'name', 'slug', 'status', 'plan', 'primary_color', 'accent_color', 'logo_url',
+        'contact_email', 'phone', 'website', 'address_line1', 'address_line2', 'city', 'state',
+        'postal_code', 'country', 'profile_image_url'
+      ).first();
   }
   res.json({ ...user, tenant });
+});
+
+const TENANT_PROFILE_FIELDS = [
+  'name', 'contact_email', 'phone', 'website', 'address_line1', 'address_line2',
+  'city', 'state', 'postal_code', 'country', 'profile_image_url', 'logo_url',
+  'primary_color', 'accent_color',
+];
+
+function selectTenantProfile() {
+  return [
+    'id', 'name', 'slug', 'status', 'plan', 'admin_email', 'contact_email', 'phone', 'website',
+    'address_line1', 'address_line2', 'city', 'state', 'postal_code', 'country', 'profile_image_url',
+    'logo_url', 'primary_color', 'accent_color', 'created_at', 'updated_at',
+  ];
+}
+
+// GET /api/auth/tenant — current tenant profile for admins
+router.get('/tenant', authenticate, requireTenant, authorize('admin'), async (req, res) => {
+  try {
+    const tenant = await db('tenants').where({ id: req.tenantId }).select(selectTenantProfile()).first();
+    if (!tenant) return res.status(404).json({ error: 'Organization not found' });
+    res.json(tenant);
+  } catch (err) {
+    console.error('Tenant profile error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// PUT /api/auth/tenant — update current tenant profile
+router.put('/tenant', authenticate, requireTenant, authorize('admin'), async (req, res) => {
+  try {
+    const updates = {};
+    for (const field of TENANT_PROFILE_FIELDS) {
+      if (req.body[field] !== undefined) updates[field] = req.body[field] || null;
+    }
+
+    if (!updates.name?.trim()) return res.status(400).json({ error: 'Organization name is required' });
+    if (updates.contact_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(updates.contact_email)) {
+      return res.status(400).json({ error: 'Contact email is invalid' });
+    }
+    for (const field of ['website', 'profile_image_url', 'logo_url']) {
+      if (updates[field] && !/^https?:\/\//i.test(updates[field])) {
+        return res.status(400).json({ error: `${field.replace(/_/g, ' ')} must start with http:// or https://` });
+      }
+    }
+
+    await db('tenants').where({ id: req.tenantId }).update(updates);
+    const tenant = await db('tenants').where({ id: req.tenantId }).select(selectTenantProfile()).first();
+
+    await logAudit({
+      entityType: 'tenant', entityId: req.tenantId, action: 'update_profile',
+      newValues: updates, userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+      tenantId: req.tenantId,
+    });
+
+    res.json(tenant);
+  } catch (err) {
+    console.error('Update tenant profile error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 // POST /api/auth/users  (admin/treasurer only — create user with any role, scoped to same tenant)

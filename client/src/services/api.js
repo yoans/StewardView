@@ -44,6 +44,8 @@ export const authAPI = {
   updateUser: (id, data) => api.put(`/auth/users/${id}`, data),
   deactivateUser: (id) => api.delete(`/auth/users/${id}`),
   changePassword: (data) => api.post('/auth/change-password', data),
+  getTenant: () => api.get('/auth/tenant'),
+  updateTenant: (data) => api.put('/auth/tenant', data),
 };
 
 // ── Transactions ─────────────────────────────────────────
