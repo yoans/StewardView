@@ -55,7 +55,7 @@ router.post('/register', async (req, res) => {
     }
 
     // Create tenant
-    const [{ id: tenantId }] = await db('tenants').insert({
+    const [{ id: tenantId }] = await insertTenant({
       name: churchName,
       slug,
       status: 'active',
@@ -149,6 +149,26 @@ router.post('/register', async (req, res) => {
     res.status(500).json({ error: 'Failed to create account. Please try again.' });
   }
 });
+
+async function insertTenant(tenant) {
+  try {
+    return await db('tenants').insert(tenant).returning('id');
+  } catch (err) {
+    if (err.code !== '23505' || err.constraint !== 'tenants_pkey') throw err;
+    await resetIdSequence('tenants');
+    return db('tenants').insert(tenant).returning('id');
+  }
+}
+
+async function resetIdSequence(tableName) {
+  await db.raw(`
+    SELECT setval(
+      pg_get_serial_sequence(?, 'id'),
+      GREATEST((SELECT COALESCE(MAX(id), 0) + 1 FROM ??), 1),
+      false
+    )
+  `, [tableName, tableName]);
+}
 
 // ── POST /api/onboarding/payment-success — confirm payment ──
 router.post('/payment-success', async (req, res) => {

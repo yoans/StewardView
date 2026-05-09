@@ -28,6 +28,11 @@ const app = express();
 const PORT = process.env.PORT || 4000;
 let appReady = false;
 
+const trustProxy = process.env.TRUST_PROXY || (process.env.NODE_ENV === 'production' ? '1' : 'false');
+if (trustProxy !== 'false') {
+  app.set('trust proxy', trustProxy === 'true' ? 1 : parseInt(trustProxy, 10));
+}
+
 // ── Middleware ────────────────────────────────────────────
 app.use(helmet({
   contentSecurityPolicy: false, // Allow React inline scripts in production
