@@ -62,7 +62,7 @@ router.post('/register', async (req, res) => {
       plan: plan || 'free',
       plan_amount: parseFloat(amount) || 0,
       admin_email: adminEmail,
-    }).returning('id');
+    });
 
     // Create admin user
     const hash = await bcrypt.hash(adminPassword, 10);
