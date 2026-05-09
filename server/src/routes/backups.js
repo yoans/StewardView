@@ -6,7 +6,7 @@ const { logAudit } = require('../models/auditLog');
 
 const BACKUP_TABLES = [
   'users', 'bank_accounts', 'categories', 'funds', 'transactions',
-  'fund_transactions', 'budgets', 'audit_log', 'bank_sync_log',
+  'fund_transactions', 'budgets', 'audit_log',
   'monthly_reports', 'givelify_contributions', 'data_backups', 'app_settings',
 ];
 

@@ -67,14 +67,14 @@
           <li>Giving records and donor contribution data entered by authorized users</li>
         </ul>
 
-        <h3 class="font-semibold text-gray-800 mt-4 mb-2">2.3 Bank Account Data (via Plaid)</h3>
-        <p>If you connect a bank account, StewardView uses <strong>Plaid Technologies, Inc.</strong> to retrieve bank data on your behalf. Through this integration, we receive and store:</p>
+        <h3 class="font-semibold text-gray-800 mt-4 mb-2">2.3 Bank Account and Import Data</h3>
+        <p>When you add bank accounts or import transactions, we receive and store:</p>
         <ul class="list-disc ml-6 mt-2 space-y-1">
-          <li>Your bank's institution name and the last 4 digits of your account number (mask only — never full account numbers)</li>
-          <li>Account balances and transaction history</li>
-          <li>A Plaid access token, which is encrypted at rest using AES-256-GCM encryption before storage</li>
+          <li>Your bank's institution name, account nickname, optional last 4 digits, and balances you enter</li>
+          <li>Transaction history imported from CSV files you upload</li>
+          <li>Import audit details, such as imported and skipped row counts</li>
         </ul>
-        <p class="mt-2">StewardView <strong>never</strong> receives or stores your bank login credentials. Bank authentication is handled entirely by Plaid's secure interface. For more information, see <a href="https://plaid.com/legal/#end-user-privacy-policy" class="text-navy-600 hover:underline" target="_blank" rel="noopener">Plaid's End User Privacy Policy</a>.</p>
+        <p class="mt-2">StewardView <strong>never</strong> asks for or stores your online banking credentials. Uploaded CSV files are parsed for import and are not stored as documents.</p>
 
         <h3 class="font-semibold text-gray-800 mt-4 mb-2">2.4 Technical and Usage Data</h3>
         <ul class="list-disc ml-6 mt-2 space-y-1">
@@ -91,7 +91,7 @@
         <ul class="list-disc ml-6 mt-2 space-y-1">
           <li>To authenticate you and manage your session</li>
           <li>To display your organization's financial data, transactions, and reports</li>
-          <li>To sync bank account data through Plaid on your behalf</li>
+          <li>To import bank transactions from CSV files you provide</li>
           <li>To enforce role-based access controls within your organization</li>
           <li>To maintain an audit trail of financial actions for accountability and record-keeping</li>
           <li>To process subscription billing through Stripe</li>
@@ -105,7 +105,6 @@
         <h2 class="text-xl font-semibold text-navy-900 mb-3">4. Data Sharing</h2>
         <p>We do not sell, rent, or share your data with third parties for commercial purposes. Data is shared only as follows:</p>
         <ul class="list-disc ml-6 mt-2 space-y-2">
-          <li><strong>Plaid Technologies, Inc.</strong> — to retrieve authorized bank account data on your behalf. Plaid acts as a service provider under your direction.</li>
           <li><strong>Railway.app</strong> — our cloud hosting and managed database provider. Railway processes data on our behalf under a data processing relationship and is SOC 2 Type II certified.</li>
           <li><strong>Stripe, Inc.</strong> — to process subscription billing. Only billing-related information is shared with Stripe; financial transaction data and bank account data are not.</li>
           <li><strong>Legal compliance</strong> — if required by law, court order, or to protect the rights and safety of users or the public, we may disclose data to government authorities.</li>
@@ -117,7 +116,6 @@
         <p>We take the security of your financial data seriously:</p>
         <ul class="list-disc ml-6 mt-2 space-y-1">
           <li>All data is transmitted over HTTPS/TLS (TLS 1.2 or higher)</li>
-          <li>Plaid access tokens are encrypted at rest using AES-256-GCM with a unique initialization vector per token</li>
           <li>Passwords are hashed using bcrypt and are never recoverable</li>
           <li>Access to financial data is restricted by role-based access control enforced server-side</li>
           <li>All data is logically isolated per organization — no tenant can access another tenant's data</li>
@@ -133,7 +131,7 @@
         <ul class="list-disc ml-6 mt-2 space-y-1">
           <li><strong>Active accounts:</strong> Data is retained for the duration of your subscription</li>
           <li><strong>Canceled accounts:</strong> Data is retained for 90 days after cancellation, during which you can request an export. After 90 days, all data — including financial records, user accounts, bank account information, and audit logs — is permanently deleted.</li>
-          <li><strong>Bank account data:</strong> Plaid access tokens and bank account metadata are deleted immediately when you unlink a bank account.</li>
+          <li><strong>Bank account data:</strong> Bank account records are deactivated when removed. Historical financial records are retained for audit integrity.</li>
           <li><strong>Backup retention:</strong> Automated daily backups are retained for 30 days, then pruned.</li>
         </ul>
         <p class="mt-3">Note: Churches often have legal obligations to retain financial records (generally 7 years under IRS guidance for US nonprofits). We recommend exporting your data before cancellation if you need records beyond our 90-day retention window.</p>
@@ -146,7 +144,7 @@
           <li><strong>Access:</strong> You can access your financial data and account information within the application at any time.</li>
           <li><strong>Export:</strong> You can request a full export of your organization's data at any time by contacting us at <a href="mailto:hello@stewardview.com" class="text-navy-600 hover:underline">hello@stewardview.com</a>.</li>
           <li><strong>Deletion:</strong> You may request deletion of your personal data. We will remove your personal identifiers within 30 days. Financial records attributed to your account may be retained for your organization's audit integrity at the request of your organization's administrator.</li>
-          <li><strong>Unlink bank accounts:</strong> You can unlink any connected bank account at any time through the application. This immediately removes the associated Plaid access token.</li>
+          <li><strong>Remove bank accounts:</strong> You can remove any bank account from active use at any time through the application.</li>
           <li><strong>Cancel your subscription:</strong> You may cancel at any time. Your data remains available for 90 days after cancellation before permanent deletion.</li>
         </ul>
         <p class="mt-3">To exercise any of these rights, contact us at <a href="mailto:hello@stewardview.com" class="text-navy-600 hover:underline">hello@stewardview.com</a>.</p>

@@ -21,8 +21,6 @@ exports.up = function (knex) {
       t.string('institution').notNullable(); // e.g. "First National Bank"
       t.string('account_type').defaultTo('checking'); // checking, savings, investment, cash
       t.string('account_mask'); // last 4 digits
-      t.string('plaid_account_id'); // Plaid account id
-      t.string('plaid_access_token'); // encrypted Plaid access token
       t.decimal('current_balance', 14, 2).defaultTo(0);
       t.decimal('available_balance', 14, 2).defaultTo(0);
       t.timestamp('balance_last_updated');
@@ -116,16 +114,6 @@ exports.up = function (knex) {
       t.timestamp('created_at').defaultTo(knex.fn.now());
     })
 
-    // ── Bank Sync Log ───────────────────────────────────────
-    .createTable('bank_sync_log', (t) => {
-      t.increments('id').primary();
-      t.integer('bank_account_id').unsigned().references('id').inTable('bank_accounts');
-      t.string('status').notNullable();
-      t.integer('transactions_synced').defaultTo(0);
-      t.text('error_message');
-      t.timestamp('synced_at').defaultTo(knex.fn.now());
-    })
-
     // ── Monthly Reports Archive ─────────────────────────────
     .createTable('monthly_reports', (t) => {
       t.increments('id').primary();
@@ -142,7 +130,6 @@ exports.up = function (knex) {
 exports.down = function (knex) {
   return knex.schema
     .dropTableIfExists('monthly_reports')
-    .dropTableIfExists('bank_sync_log')
     .dropTableIfExists('audit_log')
     .dropTableIfExists('budgets')
     .dropTableIfExists('fund_transactions')

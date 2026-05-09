@@ -1,5 +1,4 @@
 const bcrypt = require('bcryptjs');
-const { v4: uuidv4 } = require('uuid');
 
 exports.seed = async function (knex) {
   if (process.env.NODE_ENV === 'production') {
@@ -8,7 +7,6 @@ exports.seed = async function (knex) {
   }
   // Clear tables in order
   await knex('monthly_reports').del();
-  await knex('bank_sync_log').del();
   await knex('audit_log').del();
   await knex('budgets').del();
   await knex('fund_transactions').del();
@@ -23,22 +21,32 @@ exports.seed = async function (knex) {
   try { await knex('data_backups').del(); } catch { /* ok */ }
   try { await knex('app_settings').del(); } catch { /* ok */ }
 
-  // ── Users (2 admins required at minimum) ──────────────
-  const passwordHash = await bcrypt.hash('changeme123', 10);
-
-  await knex('users').insert([
-    { id: 1, email: 'admin@demo.church', password_hash: passwordHash, name: 'Admin User', role: 'admin' },
-    { id: 2, email: 'treasurer@demo.church', password_hash: passwordHash, name: 'Church Treasurer', role: 'admin' },
-    { id: 3, email: 'elder@demo.church', password_hash: passwordHash, name: 'Elder Member', role: 'elder' },
-    { id: 4, email: 'viewer@demo.church', password_hash: passwordHash, name: 'Church Member', role: 'viewer' },
-  ]);
-
-  // ── Bank Accounts ─────────────────────────────────────
-  // Generic placeholder accounts — update institution/name to match your church's actual bank
-  await knex('bank_accounts').insert([
-    { id: 1, name: 'Checking - General', institution: 'Your Bank', account_mask: '0000', current_balance: 45230.00, available_balance: 45230.00 },
-    { id: 2, name: 'Savings - Reserve', institution: 'Your Bank', account_mask: '0001', current_balance: 28500.00, available_balance: 28500.00 },
-  ]);
+  // ── Optional local bootstrap admins ───────────────────
+  // Set SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD and, optionally,
+  // SEED_SECOND_ADMIN_EMAIL / SEED_SECOND_ADMIN_PASSWORD for local setup.
+  // Production startup never runs seeds.
+  const seedAdmins = [];
+  if (process.env.SEED_ADMIN_EMAIL && process.env.SEED_ADMIN_PASSWORD) {
+    seedAdmins.push({
+      id: 1,
+      email: process.env.SEED_ADMIN_EMAIL,
+      password_hash: await bcrypt.hash(process.env.SEED_ADMIN_PASSWORD, 10),
+      name: process.env.SEED_ADMIN_NAME || 'Administrator',
+      role: 'admin',
+      tenant_id: 1,
+    });
+  }
+  if (process.env.SEED_SECOND_ADMIN_EMAIL && process.env.SEED_SECOND_ADMIN_PASSWORD) {
+    seedAdmins.push({
+      id: 2,
+      email: process.env.SEED_SECOND_ADMIN_EMAIL,
+      password_hash: await bcrypt.hash(process.env.SEED_SECOND_ADMIN_PASSWORD, 10),
+      name: process.env.SEED_SECOND_ADMIN_NAME || 'Second Administrator',
+      role: 'admin',
+      tenant_id: 1,
+    });
+  }
+  if (seedAdmins.length) await knex('users').insert(seedAdmins);
 
   // ── Categories ────────────────────────────────────────
   const incomeCategories = [
@@ -65,59 +73,13 @@ exports.seed = async function (knex) {
 
   // ── Earmarked Funds ───────────────────────────────────
   await knex('funds').insert([
-    { id: 1, name: 'General Fund', description: 'Unrestricted general operating fund', current_balance: 35000.00, is_restricted: false },
-    { id: 2, name: 'Missions Fund', description: 'Designated for missionary support', current_balance: 8500.00, target_amount: 24000.00, is_restricted: true },
-    { id: 3, name: 'Building Fund', description: 'Designated for building repairs and improvements', current_balance: 12000.00, target_amount: 50000.00, is_restricted: true },
-    { id: 4, name: 'Benevolence Fund', description: 'Designated for member/community assistance', current_balance: 3200.00, is_restricted: true },
-    { id: 5, name: 'Youth Fund', description: 'Designated for youth activities and camp', current_balance: 2100.00, target_amount: 5000.00, is_restricted: true },
+    { id: 1, name: 'General Fund', description: 'Unrestricted general operating fund', current_balance: 0, is_restricted: false },
+    { id: 2, name: 'Missions Fund', description: 'Designated for missionary support', current_balance: 0, is_restricted: true },
+    { id: 3, name: 'Building Fund', description: 'Designated for building repairs and improvements', current_balance: 0, is_restricted: true },
+    { id: 4, name: 'Benevolence Fund', description: 'Designated for member/community assistance', current_balance: 0, is_restricted: true },
+    { id: 5, name: 'Youth Fund', description: 'Designated for youth activities and camp', current_balance: 0, is_restricted: true },
   ]);
 
-  // ── Sample Transactions ───────────────────────────────
-  const today = new Date();
-  const thisMonth = today.toISOString().slice(0, 7);
-
-  await knex('transactions').insert([
-    { id: 1, ref_number: uuidv4(), type: 'income', amount: 4850.00, date: `${thisMonth}-01`, description: 'Sunday contribution - Week 1', category_id: 1, bank_account_id: 1, fund_id: 1, status: 'cleared', created_by: 1 },
-    { id: 2, ref_number: uuidv4(), type: 'income', amount: 5200.00, date: `${thisMonth}-08`, description: 'Sunday contribution - Week 2', category_id: 1, bank_account_id: 1, fund_id: 1, status: 'cleared', created_by: 1 },
-    { id: 3, ref_number: uuidv4(), type: 'income', amount: 1000.00, date: `${thisMonth}-08`, description: 'Directed gift - Missions (Smith family)', payee_payer: 'Smith Family', category_id: 2, bank_account_id: 1, fund_id: 2, status: 'cleared', created_by: 1 },
-    { id: 4, ref_number: uuidv4(), type: 'expense', amount: 3500.00, date: `${thisMonth}-05`, description: 'Minister salary - March', payee_payer: 'Minister', category_id: 10, bank_account_id: 1, fund_id: 1, status: 'cleared', check_number: '1045', created_by: 1 },
-    { id: 5, ref_number: uuidv4(), type: 'expense', amount: 450.00, date: `${thisMonth}-10`, description: 'Electric bill - March', payee_payer: 'Power Company', category_id: 11, bank_account_id: 1, fund_id: 1, status: 'cleared', check_number: '1046', created_by: 1 },
-    { id: 6, ref_number: uuidv4(), type: 'expense', amount: 200.00, date: `${thisMonth}-12`, description: 'Benevolence assistance - groceries', payee_payer: 'Member Assistance', category_id: 14, bank_account_id: 1, fund_id: 4, status: 'cleared', created_by: 1 },
-  ]);
-
-  // ── Sample Fund Transactions ──────────────────────────
-  await knex('fund_transactions').insert([
-    { fund_id: 1, transaction_id: 1, type: 'contribution', amount: 4850.00, date: `${thisMonth}-01`, description: 'Weekly contribution', created_by: 1 },
-    { fund_id: 1, transaction_id: 2, type: 'contribution', amount: 5200.00, date: `${thisMonth}-08`, description: 'Weekly contribution', created_by: 1 },
-    { fund_id: 2, transaction_id: 3, type: 'contribution', amount: 1000.00, date: `${thisMonth}-08`, description: 'Directed gift - Smith family', donor_name: 'Smith Family', created_by: 1 },
-    { fund_id: 1, transaction_id: 4, type: 'disbursement', amount: 3500.00, date: `${thisMonth}-05`, description: 'Minister salary', created_by: 1 },
-    { fund_id: 1, transaction_id: 5, type: 'disbursement', amount: 450.00, date: `${thisMonth}-10`, description: 'Electric bill', created_by: 1 },
-    { fund_id: 4, transaction_id: 6, type: 'disbursement', amount: 200.00, date: `${thisMonth}-12`, description: 'Benevolence assistance', created_by: 1 },
-  ]);
-
-  // ── Sample Budgets (Monthly for current year) ─────────
-  const year = today.getFullYear();
-  const monthlyBudgets = [];
-  for (let month = 1; month <= 12; month++) {
-    monthlyBudgets.push(
-      { year, month, category_id: 1, budgeted_amount: 18000.00, created_by: 1 },   // Tithes
-      { year, month, category_id: 2, budgeted_amount: 2000.00, created_by: 1 },    // Directed
-      { year, month, category_id: 10, budgeted_amount: 3500.00, created_by: 1 },   // Salaries
-      { year, month, category_id: 11, budgeted_amount: 500.00, created_by: 1 },    // Utilities
-      { year, month, category_id: 12, budgeted_amount: 800.00, created_by: 1 },    // Building
-      { year, month, category_id: 13, budgeted_amount: 2000.00, created_by: 1 },   // Missions
-      { year, month, category_id: 14, budgeted_amount: 500.00, created_by: 1 },    // Benevolence
-      { year, month, category_id: 15, budgeted_amount: 300.00, created_by: 1 },    // Education
-      { year, month, category_id: 16, budgeted_amount: 200.00, created_by: 1 },    // Worship
-      { year, month, category_id: 17, budgeted_amount: 150.00, created_by: 1 },    // Office
-      { year, month, category_id: 18, budgeted_amount: 400.00, created_by: 1 },    // Insurance
-      { year, month, category_id: 19, budgeted_amount: 2500.00, created_by: 1 },   // Mortgage
-    );
-  }
-  await knex('budgets').insert(monthlyBudgets);
-
-  // ── Audit log seed ────────────────────────────────────
-  await knex('audit_log').insert([
-    { entity_type: 'system', entity_id: 0, action: 'seed', new_values: '{"message":"Initial seed data loaded"}', user_id: 1, user_name: 'Church Treasurer' },
-  ]);
+  // Operational defaults stop here: no bank accounts, transactions, budgets,
+  // or fund activity are seeded. Churches start with a clean ledger.
 };

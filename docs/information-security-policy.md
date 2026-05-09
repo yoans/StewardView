@@ -10,12 +10,12 @@
 
 ## 1. Purpose and Scope
 
-This document establishes the information security policy and operational procedures for StewardView, a multi-tenant SaaS platform providing financial management and transparency tools for churches and religious organizations. StewardView integrates with Plaid to enable secure bank account linking and transaction synchronization on behalf of its customers (church administrators and treasurers).
+This document establishes the information security policy and operational procedures for StewardView, a multi-tenant SaaS platform providing financial management and transparency tools for churches and religious organizations. StewardView supports manual bank account management and CSV-based transaction import for church administrators and treasurers.
 
 This policy applies to:
 - All StewardView platform infrastructure, code, and data systems
 - All personnel with access to production systems or customer data
-- All third-party integrations, including Plaid, Stripe, and Railway
+- All third-party integrations, including Stripe and Railway
 - All tenant (customer) data processed or stored by the platform
 
 ---
@@ -27,15 +27,14 @@ The Platform Administrator is responsible for maintaining, reviewing, and enforc
 
 ### 2.2 Objectives
 - Protect the confidentiality, integrity, and availability of customer financial data
-- Maintain compliance with Plaid's developer policies and security requirements
-- Minimize risk of unauthorized access to bank account credentials and transaction data
+- Minimize risk of unauthorized access to financial records and transaction data
 - Ensure data is processed lawfully and with appropriate controls
 
 ### 2.3 Risk Management Approach
 Security risks are identified, assessed, and mitigated through:
 - Periodic threat modeling of new features before deployment
 - Review of dependency vulnerabilities (npm audit) before releases
-- Monitoring of Plaid and Railway security advisories
+- Monitoring of Railway, Stripe, and dependency security advisories
 - Incident retrospectives to identify and close gaps
 
 ---
@@ -44,7 +43,7 @@ Security risks are identified, assessed, and mitigated through:
 
 | Classification | Examples | Handling |
 |---|---|---|
-| **Critical** | Plaid access tokens, JWT secret, database credentials, encryption keys | Encrypted at rest and in transit; never logged; stored only in environment variables |
+| **Critical** | JWT secret, database credentials, encryption keys, Stripe credentials | Encrypted at rest and in transit; never logged; stored only in environment variables |
 | **Confidential** | Bank account numbers (masked), balances, transaction records, user passwords | Encrypted in transit (TLS); access restricted by RBAC; audit-logged |
 | **Internal** | Tenant configuration, report data, audit logs | Access restricted to authenticated users within their tenant |
 | **Public** | Marketing content, general platform information | No restrictions |
@@ -64,7 +63,7 @@ StewardView enforces four roles with least-privilege access:
 
 | Role | Permissions |
 |---|---|
-| **Admin** | Full tenant management, user administration, bank account linking |
+| **Admin** | Full tenant management, user administration, bank account management |
 | **Treasurer** | All financial operations (transactions, funds, budgets, reports) |
 | **Finance Committee** | Read/write transactions and reports; no user or bank management |
 | **Viewer** | Read-only access to financial data |
@@ -85,46 +84,35 @@ The platform enforces that each tenant maintains at least two admin users at all
 
 ---
 
-## 5. Plaid Integration Security
+## 5. Bank Import Security
 
-### 5.1 Token Handling
-- Plaid public tokens are exchanged server-side immediately after the Link flow; they are never stored
-- Plaid access tokens are encrypted before storage using **AES-256-GCM** with a unique 128-bit IV per token
-- The encryption key (`PLAID_TOKEN_KEY`) is a 256-bit secret stored exclusively as an environment variable; it is never committed to source code or logs
-- Decryption occurs only at the moment of API calls to Plaid; the plaintext token is never persisted or returned to the client
+### 5.1 CSV Handling
+- Uploaded CSV files are parsed in memory and are not written to disk
+- File uploads are limited to 5 MB and restricted to CSV files
+- Imported transactions are scoped to the authenticated tenant and selected bank account
+- Import activity is recorded in the audit log
 
-### 5.2 Scope Limitation
-- StewardView requests only the Plaid products necessary for its function: **Transactions** and **Auth** (balance retrieval)
-- No investment, identity, income, or other Plaid products are requested
-
-### 5.3 Data Minimization
-- Only the last 30 days of transactions are synced from Plaid
-- Bank account numbers are never stored in full; only the last-4-digit mask provided by Plaid is retained
-- Sync activity is logged in `bank_sync_log` for audit purposes
-
-### 5.4 API Credentials
-- `PLAID_CLIENT_ID` and `PLAID_SECRET` are stored as environment variables only
-- Production credentials use Plaid's `production` environment; development uses `sandbox`
-- Credentials are rotated immediately upon suspected compromise
+### 5.2 Data Minimization
+- Full bank account numbers are not stored
+- Only institution name, account nickname, optional last-four mask, balances, and imported transaction records are retained
+- Duplicate detection reduces accidental repeated imports without storing uploaded files
 
 ---
 
 ## 6. Encryption
 
 ### 6.1 Data at Rest
-- Plaid access tokens: AES-256-GCM encrypted in the database
 - User passwords: bcrypt-hashed (never stored in plaintext or reversibly)
 - Database encryption at rest: provided by Railway's managed PostgreSQL service
 
 ### 6.2 Data in Transit
 - All client-to-server traffic is served over HTTPS/TLS (enforced by Railway's infrastructure)
 - Database connections in production use TLS (`ssl: { rejectUnauthorized: false }` due to Railway's certificate chain; transport is still encrypted)
-- All Plaid API calls are made over HTTPS to Plaid's endpoints
 
 ### 6.3 Key Management
 - Encryption keys and secrets are stored as environment variables in Railway's secret management system
 - Keys are never committed to version control (`.env` files are gitignored)
-- Key rotation procedures: new key is set in environment; tokens are re-encrypted on next sync cycle
+- Key rotation procedures: new keys are set in the production environment and affected services are redeployed
 
 ---
 
@@ -176,9 +164,9 @@ This provides a complete, immutable record of all financial operations for accou
 - Sensitive values (tokens, passwords, keys) are never included in logs
 - Log output is collected by Railway's logging infrastructure
 
-### 8.3 Sync Monitoring
-- All Plaid sync attempts are logged in `bank_sync_log` with status and error details
-- Failed syncs surface errors to tenant admins through the application UI
+### 8.3 Import Monitoring
+- Bank CSV imports are recorded in the audit log with imported and skipped row counts
+- Import errors surface to tenant admins and treasurers through the application UI
 
 ### 8.4 Alerting
 - Railway restart alerts notify on repeated process failures (ON_FAILURE restart policy, max 3 retries)
@@ -207,29 +195,26 @@ This provides a complete, immutable record of all financial operations for accou
 ### 10.1 Incident Definition
 A security incident includes any confirmed or suspected:
 - Unauthorized access to tenant data
-- Exposure or compromise of Plaid access tokens or API credentials
 - Data breach affecting financial records or user credentials
 - Platform compromise or unauthorized code execution
 
 ### 10.2 Response Procedures
 
 **Step 1 — Contain**
-- Revoke compromised credentials or tokens immediately (rotate Plaid secret, JWT secret, or `PLAID_TOKEN_KEY` as applicable)
+- Revoke compromised credentials or tokens immediately (rotate JWT secret, database credentials, or Stripe credentials as applicable)
 - Suspend affected tenant(s) if data compromise is confirmed
 - Isolate affected infrastructure components
 
 **Step 2 — Assess**
 - Determine scope: which tenants, which data, what access was obtained
 - Review audit logs and access logs to establish timeline
-- Determine whether Plaid access tokens were exposed in plaintext
+- Determine whether secrets or exported financial data were exposed
 
 **Step 3 — Notify**
 - Notify affected tenants within 72 hours of confirmed breach
-- Notify Plaid per their incident notification requirements
 - Comply with applicable state breach notification laws
 
 **Step 4 — Remediate**
-- Re-encrypt any potentially compromised tokens with new key
 - Force password resets for affected users
 - Deploy patches for any exploited vulnerability
 
@@ -237,15 +222,6 @@ A security incident includes any confirmed or suspected:
 - Conduct post-incident retrospective
 - Update this policy and security controls as needed
 - Document lessons learned
-
-### 10.3 Plaid Token Compromise Protocol
-If a Plaid access token is suspected to be compromised:
-1. Immediately rotate the `PLAID_TOKEN_KEY` encryption key
-2. Re-encrypt all stored Plaid tokens with the new key
-3. Notify affected tenant(s) and advise them to re-link their bank accounts via Plaid Link
-4. Report to Plaid support
-
----
 
 ## 11. Vulnerability and Patch Management
 
@@ -273,7 +249,6 @@ If a Plaid access token is suspected to be compromised:
 
 | Vendor | Purpose | Security Posture |
 |---|---|---|
-| **Plaid** | Bank account linking and transaction data | PCI DSS compliant, SOC 2 Type II, ISO 27001 |
 | **Railway** | Hosting and managed PostgreSQL | SOC 2 Type II compliant infrastructure |
 | **Stripe** | Subscription billing | PCI DSS Level 1 Service Provider |
 
@@ -287,7 +262,7 @@ This policy is reviewed:
 - Annually at minimum
 - Following any security incident
 - When material changes are made to the platform architecture or integrations
-- When Plaid or other key vendors update their security requirements
+- When key vendors update their security requirements
 
 ---
 

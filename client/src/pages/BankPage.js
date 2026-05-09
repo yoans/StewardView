@@ -34,15 +34,17 @@ function CsvImportPanel({ accounts, onImported }) {
     setLoading(false);
   };
 
+  const selectedAccount = accounts.find(a => String(a.id) === String(accountId));
+  const canImport = accounts.length > 0 && accountId && file && !loading;
+
   return (
-    <div className="card bg-indigo-50 border border-indigo-200">
-      <div className="flex items-start gap-4">
-        <span className="text-3xl">📥</span>
+    <div className="card bg-white border border-gray-200">
+      <div className="flex flex-col lg:flex-row lg:items-start gap-5">
+        <div className="w-12 h-12 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center text-2xl shrink-0">📥</div>
         <div className="flex-1">
-          <h3 className="font-bold text-indigo-900 mb-1">Import Transactions from CSV</h3>
-          <p className="text-sm text-indigo-700 mb-3">
-            Download a CSV export from your bank's website, then upload it here. Required columns: <strong>date</strong>, <strong>amount</strong>, <strong>description</strong>.
-            Optional: <em>type</em> (income/expense), <em>check_number</em>, <em>notes</em>.
+          <h3 className="font-bold text-gray-900 mb-1">Import Bank Transactions</h3>
+          <p className="text-sm text-gray-600 mb-4">
+            Upload a CSV export from online banking. StewardView imports cleared transactions, skips rows that already exist, and leaves categories and funds ready for review on the Transactions page.
           </p>
           {error && <p className="text-red-600 text-sm mb-2">{error}</p>}
           {result && (
@@ -55,36 +57,45 @@ function CsvImportPanel({ accounts, onImported }) {
               )}
             </div>
           )}
-          <form onSubmit={handleSubmit} className="flex flex-wrap gap-3 items-end">
+          {accounts.length === 0 && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded p-3 text-sm text-yellow-800 mb-3">
+              Add a bank account before importing transactions.
+            </div>
+          )}
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-[minmax(180px,1fr)_minmax(220px,1fr)_auto] gap-3 items-end">
             <div>
-              <label className="block text-xs font-medium text-indigo-800 mb-1">Bank Account</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Import Into</label>
               <select
                 className="input-field text-sm"
                 value={accountId}
                 onChange={e => setAccountId(e.target.value)}
+                disabled={accounts.length === 0}
                 required
               >
-                <option value="">Select account…</option>
+                <option value="">Select account...</option>
                 {accounts.map(a => (
                   <option key={a.id} value={a.id}>{a.name}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-indigo-800 mb-1">CSV File</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">CSV File</label>
               <input
                 ref={fileInputRef}
                 type="file"
                 accept=".csv,text/csv"
-                className="text-sm text-gray-700"
+                className="block w-full text-sm text-gray-700"
                 onChange={e => setFile(e.target.files[0] || null)}
+                disabled={accounts.length === 0}
                 required
               />
+              {file && <p className="text-xs text-gray-500 mt-1">Ready: {file.name}</p>}
             </div>
-            <button type="submit" className="btn-primary text-sm" disabled={loading}>
-              {loading ? 'Importing…' : '⬆️ Import'}
+            <button type="submit" className="btn-primary text-sm whitespace-nowrap" disabled={!canImport}>
+              {loading ? 'Importing...' : 'Import CSV'}
             </button>
           </form>
+          {selectedAccount && <p className="text-xs text-gray-500 mt-3">Transactions will be attached to {selectedAccount.name}.</p>}
         </div>
       </div>
     </div>
@@ -253,7 +264,7 @@ export default function BankPage({ user }) {
             className={`pb-2 px-1 text-sm font-medium border-b-2 transition-colors ${tab === t ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
           >
             {t === 'accounts' && '🏦 Accounts'}
-            {t === 'import' && '📥 Import CSV'}
+            {t === 'import' && '📥 Import'}
             {t === 'setup' && '⚙️ Setup Guide'}
           </button>
         ))}
@@ -293,7 +304,7 @@ export default function BankPage({ user }) {
             <div className="card text-center py-12 text-gray-400">
               <p className="text-4xl mb-3">🏦</p>
               <p className="font-medium">No bank accounts yet</p>
-              <p className="text-sm mt-1">Add an account above, then import transactions from the CSV tab</p>
+              <p className="text-sm mt-1">Add an account, then import transactions from your bank's CSV export.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -317,25 +328,27 @@ export default function BankPage({ user }) {
           {canManage ? (
             <CsvImportPanel
               accounts={accounts}
-              onImported={() => { loadData(); setStatusMsg('Transactions imported — check the Transactions page.'); }}
+              onImported={() => { loadData(); setStatusMsg('Import finished. Review the imported transactions on the Transactions page.'); }}
             />
           ) : (
             <p className="text-gray-500 text-sm">Only admins and treasurers can import transactions.</p>
           )}
           <div className="card bg-gray-50 border border-gray-200">
-            <h3 className="font-bold text-gray-800 mb-2">📄 CSV Format</h3>
-            <p className="text-sm text-gray-600 mb-2">Your CSV must have these column headers (spelling/case flexible):</p>
+            <h3 className="font-bold text-gray-800 mb-2">📄 Supported CSV Columns</h3>
+            <p className="text-sm text-gray-600 mb-2">Column names are case-insensitive. Spaces become underscores, so "Posting Date" and "posting_date" both work.</p>
             <table className="text-sm w-full">
               <thead><tr className="text-left text-gray-500 border-b"><th className="pb-1 pr-4">Column</th><th className="pb-1 pr-4">Required</th><th className="pb-1">Notes</th></tr></thead>
               <tbody className="text-gray-700">
-                <tr className="border-b"><td className="py-1 pr-4 font-mono">date</td><td className="pr-4">Yes</td><td>MM/DD/YYYY, YYYY-MM-DD, or MM-DD-YYYY</td></tr>
-                <tr className="border-b"><td className="py-1 pr-4 font-mono">amount</td><td className="pr-4">Yes</td><td>Positive or negative number. Negative = expense.</td></tr>
-                <tr className="border-b"><td className="py-1 pr-4 font-mono">description</td><td className="pr-4">No</td><td>Transaction description or memo</td></tr>
-                <tr className="border-b"><td className="py-1 pr-4 font-mono">type</td><td className="pr-4">No</td><td>"income" or "expense" (inferred from sign if omitted)</td></tr>
+                <tr className="border-b"><td className="py-1 pr-4 font-mono">date</td><td className="pr-4">Yes</td><td>Also accepts posted_date, posting_date, transaction_date</td></tr>
+                <tr className="border-b"><td className="py-1 pr-4 font-mono">amount</td><td className="pr-4">Yes*</td><td>Positive = income, negative = expense. Parentheses are treated as negative.</td></tr>
+                <tr className="border-b"><td className="py-1 pr-4 font-mono">debit / credit</td><td className="pr-4">Yes*</td><td>Use instead of amount when your bank splits withdrawals and deposits</td></tr>
+                <tr className="border-b"><td className="py-1 pr-4 font-mono">description</td><td className="pr-4">No</td><td>Also accepts memo, details, name</td></tr>
+                <tr className="border-b"><td className="py-1 pr-4 font-mono">type</td><td className="pr-4">No</td><td>income or expense; inferred from amount when omitted</td></tr>
                 <tr className="border-b"><td className="py-1 pr-4 font-mono">check_number</td><td className="pr-4">No</td><td>Check number if applicable</td></tr>
                 <tr><td className="py-1 pr-4 font-mono">notes</td><td className="pr-4">No</td><td>Additional notes</td></tr>
               </tbody>
             </table>
+            <p className="text-xs text-gray-500 mt-2">* Provide either amount or debit/credit columns.</p>
           </div>
         </div>
       )}
@@ -344,14 +357,14 @@ export default function BankPage({ user }) {
       {tab === 'setup' && (
         <div className="space-y-4">
           <div className="card bg-indigo-50 border border-indigo-200">
-            <h3 className="font-bold text-indigo-900 mb-3">🏦 How to Get a CSV from Your Bank</h3>
-            <p className="text-sm text-indigo-800 mb-3">Every major US bank lets you download transactions as CSV from your online banking portal:</p>
+            <h3 className="font-bold text-indigo-900 mb-3">🏦 Import Workflow</h3>
+            <p className="text-sm text-indigo-800 mb-3">Use the same repeatable workflow each statement period:</p>
             <ol className="text-sm text-indigo-800 space-y-2 list-decimal list-inside">
               <li>Log in to your bank's website</li>
               <li>Navigate to your account's transaction history</li>
               <li>Set the date range you want to import</li>
-              <li>Look for a <strong>"Download"</strong> or <strong>"Export"</strong> button — choose <strong>CSV</strong></li>
-              <li>Come back here, select the account, and upload the file</li>
+              <li>Look for a <strong>"Download"</strong> or <strong>"Export"</strong> button and choose <strong>CSV</strong></li>
+              <li>Upload the file, then review imported transactions for categories and funds</li>
             </ol>
           </div>
 
@@ -368,9 +381,9 @@ export default function BankPage({ user }) {
           </div>
 
           <div className="card bg-yellow-50 border border-yellow-200">
-            <h3 className="font-bold text-yellow-900 mb-2">⚠️ Tips</h3>
+            <h3 className="font-bold text-yellow-900 mb-2">⚠️ Review Checklist</h3>
             <ul className="text-sm text-yellow-800 space-y-1 list-disc list-inside">
-              <li>Import is additive — duplicate transactions are not detected automatically. Avoid importing the same date range twice.</li>
+              <li>Duplicates with the same account, date, amount, type, description, and check number are skipped automatically.</li>
               <li>After import, review transactions on the <strong>Transactions</strong> page to assign categories and funds.</li>
               <li>Only <strong>Admin</strong> and <strong>Treasurer</strong> roles can import transactions.</li>
             </ul>

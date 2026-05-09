@@ -18,7 +18,6 @@ This policy applies to all individuals who have been granted access to any of th
 - StewardView production hosting environment (Railway)
 - Production database
 - Source code repository (GitHub)
-- Plaid developer credentials (Client ID, Secret)
 - Stripe credentials
 - Any environment variables or secrets used in production
 
@@ -38,7 +37,7 @@ All authorized personnel must:
 ## 4. Credential and Secret Management
 
 ### 4.1 Prohibition on Sharing Credentials
-- Production credentials (API keys, database passwords, JWT secrets, Plaid credentials) must **never** be shared with unauthorized parties
+- Production credentials (API keys, database passwords, JWT secrets, Stripe credentials) must **never** be shared with unauthorized parties
 - Credentials must **never** be communicated via email, Slack, SMS, or any unencrypted channel
 - Each authorized user must use their own individual account — shared credentials are prohibited
 
@@ -49,7 +48,6 @@ All authorized personnel must:
 - If a secret is inadvertently committed to version control, it must be treated as compromised: rotate it immediately and report the incident
 
 ### 4.3 Local Development
-- Local development must use Plaid Sandbox credentials only — production Plaid credentials must never be used in local development environments
 - Local development databases must not contain real customer financial data
 
 ---
@@ -57,7 +55,7 @@ All authorized personnel must:
 ## 5. Device and Access Controls
 
 ### 5.1 Multi-Factor Authentication
-- MFA must be enabled on all accounts used to access production systems: Railway, GitHub, Plaid dashboard, Stripe dashboard
+- MFA must be enabled on all accounts used to access production systems: Railway, GitHub, Stripe dashboard
 - Loss of an MFA device must be reported immediately so access can be reviewed and re-secured
 
 ### 5.2 Device Security
@@ -90,7 +88,7 @@ StewardView permits use of personal devices to access production systems subject
 
 - Customer financial data must not be downloaded to personal devices for non-operational purposes
 - Customer data must not be shared with, shown to, or discussed with unauthorized parties
-- No customer data may be used for testing, development, or demonstration purposes — Plaid Sandbox data must be used instead
+- No customer data may be used for testing, development, or demonstration purposes
 - Personnel must not attempt to access data belonging to tenants they are not authorized to support
 
 ---
@@ -99,8 +97,7 @@ StewardView permits use of personal devices to access production systems subject
 
 The following are strictly prohibited:
 
-- Sharing, selling, or disclosing Plaid credentials or customer data to any third party
-- Using Plaid API access for any purpose not directly related to StewardView's stated use case (church finance management)
+- Sharing, selling, or disclosing customer data to any third party
 - Attempting to access or modify another tenant's data
 - Running scripts, queries, or tools against production systems for non-operational purposes
 - Disabling or bypassing security controls (rate limiting, authentication, audit logging)
@@ -114,7 +111,7 @@ Violations of this policy may result in:
 - Immediate revocation of system access
 - Termination of employment or contractor relationship
 - Legal action where applicable
-- Mandatory notification to affected customers and Plaid
+- Mandatory notification to affected customers where applicable
 
 ---
 

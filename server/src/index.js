@@ -151,7 +151,7 @@ cron.schedule('0 2 * * *', async () => {
   try {
     const BACKUP_TABLES = [
       'users', 'bank_accounts', 'categories', 'funds', 'transactions',
-      'fund_transactions', 'budgets', 'audit_log', 'bank_sync_log',
+      'fund_transactions', 'budgets', 'audit_log',
       'monthly_reports', 'givelify_contributions', 'data_backups', 'app_settings',
     ];
     const backupData = {};
@@ -322,7 +322,6 @@ async function initializeApp() {
     const missing = [];
     if (!process.env.JWT_SECRET || process.env.JWT_SECRET.includes('change') || process.env.JWT_SECRET === 'dev-secret') missing.push('JWT_SECRET');
     if (!process.env.PLATFORM_ADMIN_SECRET || process.env.PLATFORM_ADMIN_SECRET.includes('change')) missing.push('PLATFORM_ADMIN_SECRET');
-    if (!process.env.PLAID_TOKEN_KEY) console.warn('WARNING: PLAID_TOKEN_KEY not set — Plaid token encryption disabled.');
     if (missing.length) {
       console.error(`FATAL: Missing or insecure production secrets: ${missing.join(', ')}. Server will not start.`);
       process.exit(1);

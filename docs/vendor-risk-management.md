@@ -15,7 +15,7 @@ This policy defines how StewardView evaluates, onboards, and monitors third-part
 ## 2. Vendor Classification
 
 ### Tier 1 — Critical Vendors (access to financial data or credentials)
-Vendors that directly process, store, or transmit customer financial data, Plaid data, or production secrets.
+Vendors that directly process, store, or transmit customer financial data or production secrets.
 
 ### Tier 2 — Infrastructure Vendors (process data on our behalf)
 Vendors that provide hosting, database, or compute infrastructure that stores or processes customer data.
@@ -29,7 +29,6 @@ Vendors providing tools, services, or SaaS products that do not have direct acce
 
 | Vendor | Tier | Purpose | Security Certifications | Status Page | Last Reviewed |
 |---|---|---|---|---|---|
-| **Plaid** | 1 | Bank account linking and transaction data | PCI DSS, SOC 2 Type II, ISO 27001, ISO 27701 | status.plaid.com | March 2026 |
 | **Railway** | 2 | Application hosting and managed PostgreSQL | SOC 2 Type II | status.railway.app | March 2026 |
 | **Stripe** | 1 | Subscription billing | PCI DSS Level 1 Service Provider, SOC 2 | status.stripe.com | March 2026 |
 | **GitHub** | 2 | Source code repository | SOC 2 Type II, ISO 27001 | githubstatus.com | March 2026 |
@@ -74,7 +73,7 @@ All Tier 1 and Tier 2 vendors are reviewed annually:
 
 ### Continuous Monitoring
 - **Status pages** for all Tier 1 and Tier 2 vendors are monitored for service incidents
-- **Security advisories** from Plaid, Railway, Stripe, and the Node.js/npm ecosystem are monitored via mailing lists and security advisories
+- **Security advisories** from Railway, Stripe, GitHub, and the Node.js/npm ecosystem are monitored via mailing lists and security advisories
 - **CVEs** in vendor software components (SDKs, drivers) are tracked via `npm audit` and Dependabot
 
 ### Incident-Triggered Review
@@ -93,19 +92,6 @@ When a vendor relationship is terminated:
 2. Request confirmation of data deletion from the vendor per the DPA
 3. Verify that all customer data previously processed by the vendor is deleted or transferred
 4. Remove the vendor from the Vendor Register (or mark as inactive with date)
-
----
-
-## 7. Plaid-Specific Obligations
-
-As a Plaid developer, StewardView is obligated to:
-- Comply with Plaid's Developer Policy at all times
-- Never share Plaid credentials with unauthorized parties
-- Notify Plaid at security@plaid.com immediately upon any security incident affecting Plaid data or credentials
-- Ensure Plaid data is used only for the purposes disclosed during onboarding (church financial management)
-- Not sell, rent, or transfer end-user data obtained via Plaid to any third party
-
-These obligations are incorporated into this vendor management policy as binding requirements.
 
 ---
 

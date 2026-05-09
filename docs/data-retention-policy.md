@@ -8,21 +8,20 @@
 
 ## 1. Purpose
 
-This policy defines how StewardView retains, archives, and deletes data — including financial records, user data, and data obtained through the Plaid integration — to meet legal, operational, and contractual requirements while minimizing unnecessary data retention.
+This policy defines how StewardView retains, archives, and deletes data, including financial records, user data, bank account metadata, and imported transaction data, to meet legal and operational requirements while minimizing unnecessary data retention.
 
 ---
 
 ## 2. Data Categories and Retention Periods
 
-### 2.1 Plaid Integration Data
+### 2.1 Bank Account and Import Data
 
 | Data Type | Retention Period | Deletion Trigger |
 |---|---|---|
-| Plaid access tokens (encrypted) | Duration of account link | Immediate on account unlink or tenant deletion |
-| Plaid public tokens | Never stored | Exchanged immediately, discarded |
-| Transaction data synced from Plaid | Life of tenant account | 90 days after tenant cancellation, then deleted |
-| Bank account metadata (institution, mask) | Duration of account link | Immediate on account unlink or tenant deletion |
-| Bank sync logs | 12 months | Automatic purge after 12 months |
+| Bank account metadata (institution, mask, balance) | Life of tenant account | 90 days after tenant cancellation, then deleted |
+| Uploaded CSV files | Never stored | Parsed in memory and discarded immediately |
+| Imported transaction data | Life of tenant account | 90 days after tenant cancellation, then deleted |
+| Import audit records | Life of tenant account + 90 days | Tenant deletion |
 
 ### 2.2 Financial Records
 
@@ -72,12 +71,11 @@ This policy defines how StewardView retains, archives, and deletes data — incl
 
 ## 3. Deletion Procedures
 
-### 3.1 User-Initiated Account Unlinking (Plaid)
-When a user unlinks a bank account through the StewardView application:
-1. The Plaid access token is immediately deleted from the `bank_accounts` table
-2. The bank account record is soft-deleted (marked inactive)
-3. Historical transaction data synced from that account is retained for financial record-keeping
-4. The deletion is recorded in the audit log
+### 3.1 Bank Account Removal
+When a user removes a bank account through the StewardView application:
+1. The bank account record is soft-deleted (marked inactive)
+2. Historical transaction data imported for that account is retained for financial record-keeping
+3. The removal is recorded in the audit log
 
 ### 3.2 Individual User Account Deletion
 When a tenant admin deletes a user account:
@@ -92,7 +90,7 @@ When a tenant cancels their subscription:
 2. A 90-day data retention window begins
 3. During this window, the tenant may contact support to export their data
 4. After 90 days, a scheduled deletion job permanently deletes:
-   - All bank accounts and associated Plaid access tokens
+   - All bank accounts
    - All financial records (transactions, funds, budgets)
    - All user accounts
    - All reports and backups
@@ -124,4 +122,4 @@ Exports are provided in a machine-readable format (JSON or CSV) within 5 busines
 
 ## 5. Policy Review
 
-This policy is reviewed annually and updated to reflect changes in legal requirements, platform capabilities, or Plaid's requirements.
+This policy is reviewed annually and updated to reflect changes in legal requirements and platform capabilities.

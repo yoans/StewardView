@@ -12,13 +12,56 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
+    if (file.mimetype === 'text/csv' || file.originalname.toLowerCase().endsWith('.csv')) {
       cb(null, true);
     } else {
       cb(new Error('Only CSV files are accepted'));
     }
   },
 });
+
+function getValue(row, keys) {
+  for (const key of keys) {
+    if (row[key] !== undefined && row[key] !== null && String(row[key]).trim() !== '') return row[key];
+  }
+  return '';
+}
+
+function parseMoney(value) {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  const isNegative = /^\(.+\)$/.test(text) || text.includes('-');
+  const numeric = parseFloat(text.replace(/[$,()\s]/g, '').replace('-', ''));
+  if (Number.isNaN(numeric)) return null;
+  return isNegative ? -numeric : numeric;
+}
+
+function normalizeDate(value) {
+  const text = String(value || '').trim();
+  const dateParts = text.match(/^(\d{1,4})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if (!dateParts) return null;
+
+  const [, first, second, third] = dateParts;
+  let normalized;
+  if (first.length === 4) {
+    normalized = `${first}-${second.padStart(2, '0')}-${third.padStart(2, '0')}`;
+  } else {
+    normalized = `${third.length === 2 ? '20' + third : third}-${first.padStart(2, '0')}-${second.padStart(2, '0')}`;
+  }
+
+  const parsed = new Date(`${normalized}T00:00:00Z`);
+  return Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== normalized ? null : normalized;
+}
+
+function uploadCsv(req, res, next) {
+  upload.single('file')(req, res, (err) => {
+    if (!err) return next();
+    if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ error: 'CSV file must be 5 MB or smaller' });
+    }
+    return res.status(400).json({ error: err.message || 'CSV upload failed' });
+  });
+}
 
 // GET /api/bank/accounts — list all bank accounts
 router.get('/accounts', authenticate, requireTenant, async (req, res) => {
@@ -28,13 +71,12 @@ router.get('/accounts', authenticate, requireTenant, async (req, res) => {
 
 // POST /api/bank/import — import transactions from a CSV file into a bank account
 //
-// Expected CSV columns (case-insensitive, flexible):
-//   date, description, amount, type (optional), check_number (optional), notes (optional)
+// Expected CSV columns are flexible and case-insensitive. Common bank exports work with:
+//   date/posting_date, amount OR debit/credit, description/memo/details, check_number, notes
 //
-// "amount" is always a positive number; "type" should be "income" or "expense".
-// If "type" is omitted, negative amounts are treated as expenses and positive as income.
+// Amount signs are normalized so expenses are stored as positive amounts with type = expense.
 //
-router.post('/import', authenticate, requireTenant, authorize('admin', 'treasurer'), upload.single('file'), async (req, res) => {
+router.post('/import', authenticate, requireTenant, authorize('admin', 'treasurer'), uploadCsv, async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No CSV file uploaded' });
 
@@ -58,22 +100,25 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
 
     if (!records.length) return res.status(400).json({ error: 'CSV file is empty' });
 
-    // Validate that required columns exist
-    const firstRow = records[0];
-    if (!firstRow.date || firstRow.amount === undefined) {
-      return res.status(400).json({ error: 'CSV must have at least "date" and "amount" columns' });
-    }
-
-    const defaultCategoryId = (await db('categories').where({ tenant_id: req.tenantId }).first())?.id || null;
-
     let imported = 0;
     let skipped = 0;
     const errors = [];
 
     for (const [i, row] of records.entries()) {
       try {
-        const rawAmount = parseFloat(String(row.amount).replace(/[$,]/g, ''));
-        if (isNaN(rawAmount)) { skipped++; continue; }
+        const dateValue = getValue(row, ['date', 'posted_date', 'posting_date', 'transaction_date']);
+        const parsedDate = normalizeDate(dateValue);
+        if (!parsedDate) { errors.push(`Row ${i + 2}: invalid date "${dateValue || 'blank'}"`); skipped++; continue; }
+
+        const debit = parseMoney(getValue(row, ['debit', 'withdrawal', 'withdrawals', 'payment', 'payments']));
+        const credit = parseMoney(getValue(row, ['credit', 'deposit', 'deposits']));
+        let rawAmount = parseMoney(getValue(row, ['amount', 'transaction_amount']));
+
+        if (rawAmount === null) {
+          if (debit !== null) rawAmount = -Math.abs(debit);
+          if (credit !== null) rawAmount = Math.abs(credit);
+        }
+        if (rawAmount === null || rawAmount === 0) { skipped++; continue; }
 
         const amount = Math.abs(rawAmount);
 
@@ -83,21 +128,26 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
           type = rawAmount < 0 ? 'expense' : 'income';
         }
 
-        // Normalise date — accept MM/DD/YYYY, MM-DD-YYYY, YYYY-MM-DD
-        const dateParts = String(row.date).match(/(\d{1,4})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
-        if (!dateParts) { errors.push(`Row ${i + 2}: invalid date "${row.date}"`); skipped++; continue; }
-        let parsedDate;
-        const [, a, b, c] = dateParts;
-        if (a.length === 4) {
-          parsedDate = `${a}-${b.padStart(2, '0')}-${c.padStart(2, '0')}`;
-        } else {
-          parsedDate = `${c.length === 2 ? '20' + c : c}-${a.padStart(2, '0')}-${b.padStart(2, '0')}`;
-        }
+        const description = String(getValue(row, ['description', 'memo', 'details', 'name', 'transaction_description']) || 'Imported transaction').trim().slice(0, 255);
+        const payee = String(getValue(row, ['payee', 'payee_payer', 'name'])).trim().slice(0, 255) || null;
+        const checkNumber = String(getValue(row, ['check_number', 'check_no', 'check', 'check_#'])).trim() || null;
+        const notes = String(getValue(row, ['notes', 'note', 'memo'])).trim() || null;
 
-        const description = (row.description || row.memo || row.payee || 'Imported transaction').trim().slice(0, 255);
-        const payee = (row.payee || row.payee_payer || '').trim().slice(0, 255) || null;
-        const checkNumber = (row.check_number || row.check_no || row.check || '').trim() || null;
-        const notes = (row.notes || row.note || row.memo || '').trim() || null;
+        const duplicate = await db('transactions')
+          .where({
+            tenant_id: req.tenantId,
+            bank_account_id: account.id,
+            date: parsedDate,
+            type,
+            amount,
+            description,
+          })
+          .modify((query) => {
+            if (checkNumber) query.where('check_number', checkNumber);
+          })
+          .first();
+
+        if (duplicate) { skipped++; continue; }
 
         await db('transactions').insert({
           ref_number: `IMP-${uuidv4().slice(0, 8).toUpperCase()}`,
@@ -108,7 +158,6 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
           payee_payer: payee,
           check_number: checkNumber,
           bank_account_id: account.id,
-          category_id: defaultCategoryId,
           status: 'cleared',
           notes,
           created_by: req.user.id,
@@ -146,7 +195,7 @@ router.get('/balances', authenticate, requireTenant, async (req, res) => {
   res.json({ accounts, total_balance: total });
 });
 
-// POST /api/bank/accounts — create a manual (non-Plaid) bank account
+// POST /api/bank/accounts — create a bank account
 router.post('/accounts', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
   try {
     const { name, institution, account_mask, current_balance, available_balance, account_type } = req.body;

@@ -6,7 +6,7 @@ StewardView is a multi-tenant church finance platform with a public marketing si
 
 - Multi-tenant church finance management
 - Public onboarding flow with optional paid Stripe checkout
-- Plaid-based bank account linking and manual account entry
+- Manual bank account management with CSV transaction import
 - Budgets, funds, audit history, reports, and Givelify support
 - Platform admin controls for tenant oversight
 
@@ -17,7 +17,7 @@ StewardView is a multi-tenant church finance platform with a public marketing si
 | Frontend  | React 18 + Tailwind CSS           |
 | Backend   | Node.js + Express                 |
 | Database  | PostgreSQL                        |
-| Banking   | Plaid API (any bank or credit union)  |
+| Banking   | Manual accounts + CSV import          |
 | Reports   | PDFKit                            |
 | Auth      | JWT + bcrypt                      |
 
@@ -54,15 +54,13 @@ Local development expects PostgreSQL. Set `DEV_DATABASE_URL` in `server/.env` fo
 | `DATABASE_URL` | PostgreSQL connection string used in production |
 | `JWT_SECRET` | Secret key for JWT signing |
 | `APP_URL` | Public base URL, for example `https://stewardview.com` |
-| `PLAID_CLIENT_ID` | Plaid client ID |
-| `PLAID_SECRET` | Plaid secret |
-| `PLAID_ENV` | `sandbox`, `development`, or `production` |
-| `ORG_NAME` | Default organization name shown in Plaid Link |
 | `STRIPE_SECRET_KEY` | Required only for paid onboarding |
 | `STRIPE_WEBHOOK_SECRET` | Required only for Stripe webhooks |
 | `PLATFORM_ADMIN_SECRET` | Optional shared secret for platform admin APIs |
 | `CORS_ORIGINS` | Optional comma-separated allowlist for cross-origin frontend hosting |
 | `REPORT_DIR` | Output directory for generated reports |
+| `SEED_ADMIN_EMAIL` | Optional local seed admin email for non-production setup |
+| `SEED_ADMIN_PASSWORD` | Optional local seed admin password for non-production setup |
 
 ## Railway Deploy Checklist
 
@@ -77,14 +75,6 @@ Local development expects PostgreSQL. Set `DEV_DATABASE_URL` in `server/.env` fo
 
 ## Third-Party Setup
 
-### Plaid
-
-Needed only if you want live bank sync.
-
-1. Create a Plaid account.
-2. Set `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV`, and optionally `ORG_NAME`.
-3. In production, switch `PLAID_ENV` to `production`.
-
 ### Stripe
 
 Needed only if you want paid self-service onboarding.
@@ -94,25 +84,23 @@ Needed only if you want paid self-service onboarding.
 3. Set `STRIPE_WEBHOOK_SECRET` from that webhook.
 4. Keep `APP_URL` pointed at your public base domain. The app will send Stripe users back to `/app/payment-success`.
 
-## Bank Integration (Any Bank via Plaid)
+## Bank Transaction Import
 
-This system uses **Plaid** to securely connect to any bank or credit union — over **12,000 institutions** are supported. You're not locked into any specific bank. To set up:
+StewardView supports any bank that can export transactions as CSV. To use it:
 
-1. Create a free account at [plaid.com](https://plaid.com)
-2. Get your `client_id` and `secret` from the Plaid dashboard
-3. Set `PLAID_CLIENT_ID`, `PLAID_SECRET`, and `ORG_NAME` in your environment
-4. Go to the **Bank Accounts** page in the app and click **"Connect a Bank Account"**
-5. The Plaid Link UI will appear — search for and log in to any bank your church uses
-6. The system will pull live balances and transactions automatically
+1. Add the bank account on the **Bank Accounts** page.
+2. Export transactions from online banking as CSV.
+3. Open **Bank Accounts → Import** and upload the file.
+4. Review imported transactions on the **Transactions** page to assign categories and funds.
 
-**No Plaid? No problem.** You can also add accounts manually (enter balances yourself) from the same Bank Accounts page. Manual and Plaid-linked accounts can coexist.
+The importer accepts common columns such as `date`, `posting_date`, `amount`, `debit`, `credit`, `description`, `memo`, `details`, `check_number`, and `notes`. Likely duplicate rows are skipped automatically.
 
 ## Important Notes
 
 - The public site lives at `/`; the authenticated product lives at `/app`.
 - The server now uses PostgreSQL in both development and production, so native SQLite/node-gyp builds are no longer part of the normal workflow.
-- Production startup runs migrations automatically, but it does not seed demo users.
-- Demo credentials shown in the login page are for local seeded development only.
+- Production startup runs migrations automatically and never seeds users or financial data.
+- Local seeds create reference categories and funds only. Set `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD` if you want a local bootstrap admin.
 - Custom tenant subdomains or custom domains are not implemented yet. The current multi-tenant model is tenant-ID based, not host-header based.
 
 ## Monthly Reports

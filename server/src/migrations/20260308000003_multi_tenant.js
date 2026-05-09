@@ -42,7 +42,7 @@ exports.up = async function (knex) {
   //       a full table rebuild, which would fail due to existing FK relationships.
   const allDataTables = [
     'users', 'bank_accounts', 'funds', 'categories', 'transactions', 'budgets',
-    'fund_transactions', 'audit_log', 'bank_sync_log', 'monthly_reports',
+    'fund_transactions', 'audit_log', 'monthly_reports',
     'data_backups', 'app_settings', 'givelify_contributions',
   ];
 
@@ -62,7 +62,7 @@ exports.up = async function (knex) {
 exports.down = async function (knex) {
   const allTables = [
     'users', 'bank_accounts', 'funds', 'categories', 'transactions', 'budgets',
-    'fund_transactions', 'audit_log', 'bank_sync_log', 'monthly_reports',
+    'fund_transactions', 'audit_log', 'monthly_reports',
     'data_backups', 'app_settings', 'givelify_contributions',
   ];
   for (const table of allTables) {
