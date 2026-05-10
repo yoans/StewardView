@@ -6,13 +6,14 @@ export default function LoginPage({ onLogin }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [mode, setMode] = useState('login'); // 'login' | 'signup'
-  const [step, setStep] = useState('credentials'); // 'credentials' | 'mfa' | 'forgot' | 'reset'
+  const [step, setStep] = useState('credentials'); // 'credentials' | 'mfa' | 'forgot' | 'reset' | 'invite'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [churchName, setChurchName] = useState('');
   const [resetPassword, setResetPassword] = useState('');
   const [resetConfirm, setResetConfirm] = useState('');
   const [resetToken, setResetToken] = useState('');
+  const [inviteToken, setInviteToken] = useState('');
   const [name, setName] = useState('');
   const [mfaToken, setMfaToken] = useState('');
   const [mfaCode, setMfaCode] = useState(['', '', '', '', '', '']);
@@ -27,6 +28,14 @@ export default function LoginPage({ onLogin }) {
     if (token) {
       setResetToken(token);
       setStep('reset');
+      setMode('login');
+      setError('');
+      setNotice('');
+    }
+    const invite = params.get('invite_token');
+    if (invite) {
+      setInviteToken(invite);
+      setStep('invite');
       setMode('login');
       setError('');
       setNotice('');
@@ -127,6 +136,29 @@ export default function LoginPage({ onLogin }) {
     }
   };
 
+  const handleInviteSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setNotice('');
+    if (resetPassword.length < 8) { setError('Password must be at least 8 characters'); return; }
+    if (resetPassword !== resetConfirm) { setError('Passwords do not match'); return; }
+    setLoading(true);
+    try {
+      const res = await authAPI.acceptInvite(inviteToken, resetPassword);
+      setNotice(res.data.message || 'Password set. An admin must approve your account before you can sign in.');
+      setPassword('');
+      setResetPassword('');
+      setResetConfirm('');
+      setInviteToken('');
+      setStep('credentials');
+      navigate('/login', { replace: true });
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not complete account setup');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleCodeChange = (index, value) => {
     // Only allow digits
     const digit = value.replace(/\D/g, '').slice(-1);
@@ -171,6 +203,10 @@ export default function LoginPage({ onLogin }) {
     setResetConfirm('');
     if (resetToken) {
       setResetToken('');
+      navigate('/login', { replace: true });
+    }
+    if (inviteToken) {
+      setInviteToken('');
       navigate('/login', { replace: true });
     }
   };
@@ -298,6 +334,46 @@ export default function LoginPage({ onLogin }) {
 
               <button type="submit" className="btn-primary w-full" disabled={loading}>
                 {loading ? 'Resetting...' : 'Reset Password'}
+              </button>
+            </form>
+
+            <div className="mt-4 text-center">
+              <button className="text-sm text-blue-600 hover:text-blue-800" onClick={handleBackToCredentials}>
+                Back to sign in
+              </button>
+            </div>
+          </>
+        ) : step === 'invite' ? (
+          <>
+            <div className="text-center mb-6">
+              <h2 className="text-lg font-semibold text-gray-900">Set up your account</h2>
+              <p className="text-gray-500 text-sm mt-1">Choose a password. An admin will approve access before you can sign in.</p>
+            </div>
+
+            <form onSubmit={handleInviteSubmit} className="space-y-4">
+              {error && <div className="bg-red-50 text-red-700 p-3 rounded-lg text-sm">{error}</div>}
+              {notice && <div className="bg-green-50 text-green-700 p-3 rounded-lg text-sm">{notice}</div>}
+
+              <div>
+                <label className="label">New Password</label>
+                <input
+                  type="password" className="input" value={resetPassword}
+                  onChange={(e) => setResetPassword(e.target.value)}
+                  placeholder="••••••••" required
+                />
+              </div>
+
+              <div>
+                <label className="label">Confirm Password</label>
+                <input
+                  type="password" className="input" value={resetConfirm}
+                  onChange={(e) => setResetConfirm(e.target.value)}
+                  placeholder="••••••••" required
+                />
+              </div>
+
+              <button type="submit" className="btn-primary w-full" disabled={loading}>
+                {loading ? 'Setting up...' : 'Set Password'}
               </button>
             </form>
 

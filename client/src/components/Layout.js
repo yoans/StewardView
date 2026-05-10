@@ -10,6 +10,7 @@ const navItems = [
   { path: '/bank', label: 'Bank', icon: '🏧' },
   { path: '/reports', label: 'Reports', icon: '📄' },
   { path: '/audit', label: 'Audit Trail', icon: '🔍' },
+  { path: '/account', label: 'Account', icon: '👤' },
   { path: '/admin', label: 'Admin', icon: '⚙️', adminOnly: true },
 ];
 

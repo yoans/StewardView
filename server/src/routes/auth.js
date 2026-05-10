@@ -6,7 +6,7 @@ const db = require('../models/db');
 const { authenticate, authorize } = require('../middleware/auth');
 const { requireTenant } = require('../middleware/tenant');
 const { logAudit } = require('../models/auditLog');
-const { sendMfaCode, sendPasswordResetEmail } = require('../services/email');
+const { sendMfaCode, sendPasswordResetEmail, sendUserInviteEmail } = require('../services/email');
 
 const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production'
   ? (() => { throw new Error('JWT_SECRET must be set in production'); })()
@@ -14,11 +14,12 @@ const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'producti
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h';
 const MFA_CODE_EXPIRY_MINUTES = 10;
 const PASSWORD_RESET_EXPIRY_MINUTES = 30;
+const INVITE_EXPIRY_DAYS = 7;
 const MIN_ADMINS = 2;
 
 // ── Helper: count active admins within a tenant ──────────
 async function countActiveAdmins(tenantId) {
-  const query = db('users').where({ role: 'admin', is_active: true });
+  const query = db('users').where({ role: 'admin', is_active: true, is_approved: true }).whereNull('deleted_at');
   if (tenantId) query.where({ tenant_id: tenantId });
   const result = await query.count('* as count').first();
   return parseInt(result.count) || 0;
@@ -39,14 +40,34 @@ function buildPasswordResetUrl(token) {
   return `${baseUrl}/login?reset_token=${encodeURIComponent(token)}`;
 }
 
+function buildInviteSetupUrl(token) {
+  const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const baseUrl = appUrl.endsWith('/app') ? appUrl : `${appUrl}/app`;
+  return `${baseUrl}/login?invite_token=${encodeURIComponent(token)}`;
+}
+
+async function createInviteToken(userId) {
+  await db('user_invite_tokens').where({ user_id: userId, used: false }).update({ used: true });
+  const token = crypto.randomBytes(32).toString('hex');
+  await db('user_invite_tokens').insert({
+    user_id: userId,
+    token_hash: hashResetToken(token),
+    expires_at: new Date(Date.now() + INVITE_EXPIRY_DAYS * 24 * 60 * 60 * 1000),
+  });
+  return token;
+}
+
 // POST /api/auth/login — validates credentials, sends MFA code via email
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
 
-    const user = await db('users').where({ email, is_active: true }).first();
+    const user = await db('users').where({ email }).whereNull('deleted_at').first();
     if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+    if (user.must_set_password) return res.status(403).json({ error: 'Use your setup link to choose a password before signing in.' });
+    if (!user.is_approved) return res.status(403).json({ error: 'Your account is pending admin approval.' });
+    if (!user.is_active) return res.status(403).json({ error: 'This account has been deactivated.' });
 
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
@@ -100,7 +121,10 @@ router.post('/verify-mfa', async (req, res) => {
     // Mark code as used
     await db('mfa_codes').where({ id: record.id }).update({ used: true });
 
-    const user = await db('users').where({ id: decoded.id, is_active: true }).first();
+    const user = await db('users')
+      .where({ id: decoded.id, is_active: true, is_approved: true, must_set_password: false })
+      .whereNull('deleted_at')
+      .first();
     if (!user) return res.status(401).json({ error: 'Account not found' });
 
     const payload = {
@@ -130,7 +154,10 @@ router.post('/forgot-password', async (req, res) => {
     if (!email) return res.status(400).json({ error: 'Email is required' });
 
     const genericMessage = 'If an active account exists for that email, a reset link has been sent.';
-    const user = await db('users').where({ email, is_active: true }).first();
+    const user = await db('users')
+      .where({ email, is_active: true, is_approved: true })
+      .whereNull('deleted_at')
+      .first();
 
     if (user) {
       await db('password_reset_tokens').where({ user_id: user.id, used: false }).update({ used: true });
@@ -178,11 +205,11 @@ router.post('/reset-password', async (req, res) => {
 
     if (!reset) return res.status(400).json({ error: 'Reset link is invalid or expired' });
 
-    const user = await db('users').where({ id: reset.user_id, is_active: true }).first();
+    const user = await db('users').where({ id: reset.user_id, is_active: true }).whereNull('deleted_at').first();
     if (!user) return res.status(400).json({ error: 'Reset link is invalid or expired' });
 
     const hash = await bcrypt.hash(newPassword, 10);
-    await db('users').where({ id: user.id }).update({ password_hash: hash });
+    await db('users').where({ id: user.id }).update({ password_hash: hash, must_set_password: false });
     await db('password_reset_tokens').where({ user_id: user.id, used: false }).update({ used: true });
     await db('mfa_codes').where({ user_id: user.id, used: false }).update({ used: true });
 
@@ -195,6 +222,39 @@ router.post('/reset-password', async (req, res) => {
   } catch (err) {
     console.error('Reset password error:', err);
     res.status(500).json({ error: 'Could not reset password' });
+  }
+});
+
+// POST /api/auth/accept-invite — choose first password from temporary setup link
+router.post('/accept-invite', async (req, res) => {
+  try {
+    const token = String(req.body.token || '').trim();
+    const newPassword = String(req.body.new_password || '');
+    if (!token || !newPassword) return res.status(400).json({ error: 'Setup token and password are required' });
+    if (newPassword.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+
+    const invite = await db('user_invite_tokens')
+      .where({ token_hash: hashResetToken(token), used: false })
+      .where('expires_at', '>', new Date())
+      .first();
+    if (!invite) return res.status(400).json({ error: 'Setup link is invalid or expired' });
+
+    const user = await db('users').where({ id: invite.user_id }).whereNull('deleted_at').first();
+    if (!user) return res.status(400).json({ error: 'Setup link is invalid or expired' });
+
+    const hash = await bcrypt.hash(newPassword, 10);
+    await db('users').where({ id: user.id }).update({ password_hash: hash, must_set_password: false });
+    await db('user_invite_tokens').where({ user_id: user.id, used: false }).update({ used: true });
+
+    await logAudit({
+      entityType: 'user', entityId: user.id, action: 'invite_accepted',
+      userName: user.name, ipAddress: req.ip, tenantId: user.tenant_id || null,
+    });
+
+    res.json({ message: 'Password set successfully. An admin must approve your account before you can sign in.' });
+  } catch (err) {
+    console.error('Accept invite error:', err);
+    res.status(500).json({ error: 'Could not complete account setup' });
   }
 });
 
@@ -278,30 +338,36 @@ router.put('/tenant', authenticate, requireTenant, authorize('admin'), async (re
   }
 });
 
-// POST /api/auth/users  (admin/treasurer only — create user with any role, scoped to same tenant)
-router.post('/users', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
+// POST /api/auth/users — invite a user, scoped to same tenant, pending admin approval
+router.post('/users', authenticate, requireTenant, authorize('admin'), async (req, res) => {
   try {
-    const { email, password, name, role } = req.body;
-    if (!email || !password || !name) {
-      return res.status(400).json({ error: 'Email, password, and name are required' });
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const { name, role } = req.body;
+    if (!email || !name) {
+      return res.status(400).json({ error: 'Email and name are required' });
     }
 
     const existing = await db('users').where({ email }).first();
     if (existing) return res.status(409).json({ error: 'Email already registered' });
 
-    const hash = await bcrypt.hash(password, 10);
+    const hash = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10);
     const [{ id }] = await db('users').insert({
       email, password_hash: hash, name, role: role || 'viewer',
-      tenant_id: req.tenantId,
+      tenant_id: req.tenantId, is_active: false, is_approved: false,
+      must_set_password: true, invited_at: new Date(),
     }).returning('id');
 
+    const token = await createInviteToken(id);
+    await sendUserInviteEmail(email, buildInviteSetupUrl(token), req.user.name, req.tenant?.name);
+
     await logAudit({
-      entityType: 'user', entityId: id, action: 'create',
-      newValues: { email, name, role, tenant_id: req.tenantId },
+      entityType: 'user', entityId: id, action: 'invite',
+      newValues: { email, name, role, tenant_id: req.tenantId, is_approved: false },
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+      tenantId: req.tenantId,
     });
 
-    res.status(201).json({ id, email, name, role: role || 'viewer' });
+    res.status(201).json({ id, email, name, role: role || 'viewer', is_active: false, is_approved: false, must_set_password: true });
   } catch (err) {
     console.error('Create user error:', err);
     res.status(500).json({ error: 'Server error' });
@@ -312,7 +378,8 @@ router.post('/users', authenticate, requireTenant, authorize('admin', 'treasurer
 router.get('/users', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
   const users = await db('users')
     .where({ tenant_id: req.tenantId })
-    .select('id', 'email', 'name', 'role', 'is_active', 'created_at');
+    .whereNull('deleted_at')
+    .select('id', 'email', 'name', 'role', 'is_active', 'is_approved', 'must_set_password', 'invited_at', 'approved_at', 'created_at');
   res.json(users);
 });
 
@@ -331,6 +398,12 @@ router.put('/users/:id', authenticate, requireTenant, authorize('admin'), async 
       updates.role = req.body.role;
     }
     if (req.body.is_active !== undefined) updates.is_active = req.body.is_active;
+    if (req.body.is_approved !== undefined) {
+      updates.is_approved = Boolean(req.body.is_approved);
+      updates.is_active = Boolean(req.body.is_approved);
+      updates.approved_at = Boolean(req.body.is_approved) ? new Date() : null;
+      updates.approved_by = Boolean(req.body.is_approved) ? req.user.id : null;
+    }
     if (req.body.name !== undefined) updates.name = req.body.name;
 
     // Enforce minimum 2 admins rule
@@ -347,17 +420,40 @@ router.put('/users/:id', authenticate, requireTenant, authorize('admin'), async 
 
     await logAudit({
       entityType: 'user', entityId: target.id, action: 'update',
-      oldValues: { role: target.role, is_active: target.is_active },
+      oldValues: { role: target.role, is_active: target.is_active, is_approved: target.is_approved },
       newValues: updates,
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+      tenantId: req.tenantId,
     });
 
     const updated = await db('users').where({ id: req.params.id })
-      .select('id', 'email', 'name', 'role', 'is_active').first();
+      .select('id', 'email', 'name', 'role', 'is_active', 'is_approved', 'must_set_password', 'invited_at', 'approved_at').first();
     res.json(updated);
   } catch (err) {
     console.error('Update user error:', err);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/auth/users/:id/resend-invite — send a fresh setup link
+router.post('/users/:id/resend-invite', authenticate, requireTenant, authorize('admin'), async (req, res) => {
+  try {
+    const target = await db('users').where({ id: req.params.id, tenant_id: req.tenantId }).whereNull('deleted_at').first();
+    if (!target) return res.status(404).json({ error: 'User not found' });
+    if (!target.must_set_password) return res.status(400).json({ error: 'This user has already set a password' });
+
+    const token = await createInviteToken(target.id);
+    await sendUserInviteEmail(target.email, buildInviteSetupUrl(token), req.user.name, req.tenant?.name);
+
+    await logAudit({
+      entityType: 'user', entityId: target.id, action: 'resend_invite',
+      userId: req.user.id, userName: req.user.name, ipAddress: req.ip, tenantId: req.tenantId,
+    });
+
+    res.json({ message: 'Setup link sent' });
+  } catch (err) {
+    console.error('Resend invite error:', err);
+    res.status(500).json({ error: 'Could not send setup link' });
   }
 });
 
@@ -389,6 +485,7 @@ router.delete('/users/:id', authenticate, requireTenant, authorize('admin'), asy
       oldValues: { is_active: true },
       newValues: { is_active: false },
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+      tenantId: req.tenantId,
     });
 
     res.json({ message: 'User deactivated', id: target.id });
@@ -419,12 +516,51 @@ router.post('/change-password', authenticate, async (req, res) => {
     await logAudit({
       entityType: 'user', entityId: req.user.id, action: 'change_password',
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+      tenantId: req.user.tenant_id || null,
     });
 
     res.json({ message: 'Password changed successfully' });
   } catch (err) {
     console.error('Change password error:', err);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// DELETE /api/auth/me — soft-delete current account
+router.delete('/me', authenticate, async (req, res) => {
+  try {
+    const user = await db('users').where({ id: req.user.id }).whereNull('deleted_at').first();
+    if (!user) return res.status(404).json({ error: 'Account not found' });
+
+    if (user.role === 'admin' && user.tenant_id) {
+      const adminCount = await countActiveAdmins(user.tenant_id);
+      if (adminCount <= MIN_ADMINS) {
+        return res.status(400).json({
+          error: `Cannot delete this admin account. System requires at least ${MIN_ADMINS} active admins.`,
+        });
+      }
+    }
+
+    await db('users').where({ id: user.id }).update({
+      is_active: false,
+      is_approved: false,
+      deleted_at: new Date(),
+    });
+    await db('mfa_codes').where({ user_id: user.id, used: false }).update({ used: true });
+    await db('password_reset_tokens').where({ user_id: user.id, used: false }).update({ used: true });
+    await db('user_invite_tokens').where({ user_id: user.id, used: false }).update({ used: true });
+
+    await logAudit({
+      entityType: 'user', entityId: user.id, action: 'delete_self',
+      oldValues: { is_active: user.is_active, is_approved: user.is_approved },
+      newValues: { is_active: false, is_approved: false, deleted_at: true },
+      userId: user.id, userName: user.name, ipAddress: req.ip, tenantId: user.tenant_id || null,
+    });
+
+    res.json({ message: 'Your account has been deleted.' });
+  } catch (err) {
+    console.error('Delete account error:', err);
+    res.status(500).json({ error: 'Could not delete account' });
   }
 });
 

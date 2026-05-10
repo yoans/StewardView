@@ -36,14 +36,17 @@ api.interceptors.response.use(
 export const authAPI = {
   login: (email, password) => api.post('/auth/login', { email, password }),
   verifyMfa: (mfa_token, code) => api.post('/auth/verify-mfa', { mfa_token, code }),
+  acceptInvite: (token, new_password) => api.post('/auth/accept-invite', { token, new_password }),
   forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
   resetPassword: (token, new_password) => api.post('/auth/reset-password', { token, new_password }),
   me: () => api.get('/auth/me'),
   getUsers: () => api.get('/auth/users'),
   createUser: (data) => api.post('/auth/users', data),
   updateUser: (id, data) => api.put(`/auth/users/${id}`, data),
+  resendInvite: (id) => api.post(`/auth/users/${id}/resend-invite`),
   deactivateUser: (id) => api.delete(`/auth/users/${id}`),
   changePassword: (data) => api.post('/auth/change-password', data),
+  deleteAccount: () => api.delete('/auth/me'),
   getTenant: () => api.get('/auth/tenant'),
   updateTenant: (data) => api.put('/auth/tenant', data),
 };

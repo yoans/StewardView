@@ -19,9 +19,13 @@ function authenticate(req, res, next) {
     const decoded = jwt.verify(token, JWT_SECRET);
 
     // Re-check that the user hasn't been deactivated since the JWT was issued
-    db('users').where({ id: decoded.id, is_active: true }).select('id').first()
+    db('users')
+      .where({ id: decoded.id, is_active: true, is_approved: true })
+      .whereNull('deleted_at')
+      .select('id')
+      .first()
       .then((row) => {
-        if (!row) return res.status(401).json({ error: 'Account deactivated' });
+        if (!row) return res.status(401).json({ error: 'Account is not active or approved' });
         req.user = decoded;
         next();
       })

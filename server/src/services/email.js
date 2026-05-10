@@ -49,4 +49,29 @@ async function sendPasswordResetEmail(toEmail, resetUrl) {
   });
 }
 
-module.exports = { sendMfaCode, sendPasswordResetEmail };
+async function sendUserInviteEmail(toEmail, setupUrl, inviterName, organizationName) {
+  await resend.emails.send({
+    from: FROM_ADDRESS,
+    to: toEmail,
+    subject: `StewardView — Set up your ${organizationName || 'organization'} account`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 520px; margin: 0 auto; padding: 24px;">
+        <h2 style="color: #1e3a5f;">You're invited to StewardView</h2>
+        <p>${inviterName || 'An administrator'} invited you to join ${organizationName || 'their organization'} in StewardView.</p>
+        <p>Use this secure link to choose your password. Your account will remain pending until an admin approves access.</p>
+        <p style="margin: 24px 0;">
+          <a href="${setupUrl}" style="background: #1d4ed8; color: white; padding: 12px 18px;
+             border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">
+            Set Up Account
+          </a>
+        </p>
+        <p style="color: #374151; font-size: 14px;">This link expires in 7 days.</p>
+        <p style="color: #6b7280; font-size: 14px;">
+          If you were not expecting this invitation, you can safely ignore this email.
+        </p>
+      </div>
+    `,
+  });
+}
+
+module.exports = { sendMfaCode, sendPasswordResetEmail, sendUserInviteEmail };

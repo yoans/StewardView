@@ -16,6 +16,7 @@ const tables = [
   'mfa_codes',
   'bank_imports',
   'password_reset_tokens',
+  'user_invite_tokens',
 ];
 
 exports.up = async function (knex) {

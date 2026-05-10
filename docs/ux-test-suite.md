@@ -27,11 +27,29 @@ Use this checklist before each production release and after any database reset. 
 
 ## 3. Viewer Experience
 
-- As an admin, create a viewer user from Admin, Add User.
+- As an admin, invite a viewer user from Admin, Add User.
+- Confirm the admin form does not ask for a password.
+- Confirm the invited user appears as Invited or Pending approval in the user table.
+- Open the emailed setup link and choose a password.
+- Try signing in before approval and confirm the app blocks access with a pending approval message.
+- As an admin, approve the user.
 - Sign out and sign in as the viewer.
 - Confirm the viewer sees the same organization name, profile image, address, email, and phone in the app shell/dashboard.
 - Confirm the Admin tab is not visible to the viewer.
 - Confirm viewer navigation to `/app/admin` does not allow profile editing.
+
+## 3A. Account Settings
+
+- Sign in as any approved user.
+- Open Account.
+- Change the password with an incorrect current password and confirm a clear error appears.
+- Change the password with the correct current password and confirm success.
+- Sign out and confirm the old password no longer works.
+- Sign in with the new password.
+- Open Account, type a mismatched email in Delete Account, and confirm deletion is blocked.
+- Type the signed-in email and delete the account.
+- Confirm the app signs out and the deleted account can no longer sign in.
+- For admin users, confirm deletion is blocked if deleting the account would violate the minimum active-admin requirement.
 
 ## 4. Treasurer and Admin Boundaries
 
@@ -72,3 +90,5 @@ Use this checklist before each production release and after any database reset. 
 - Confirm signup no longer logs stale sequence duplicate-key errors.
 - Confirm rate-limit logs do not show `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR`.
 - Confirm a second organization can sign up and receives its own default funds.
+- Confirm invited users receive setup email links.
+- Confirm invited users cannot access any app page until an admin approves them.

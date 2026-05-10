@@ -73,6 +73,9 @@ router.post('/register', async (req, res) => {
       name: adminName,
       role: 'admin',
       is_active: true,
+      is_approved: true,
+      must_set_password: false,
+      approved_at: new Date(),
       tenant_id: tenantId,
     }).returning('id');
 

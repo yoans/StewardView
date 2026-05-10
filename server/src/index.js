@@ -77,6 +77,9 @@ const authLimiter = rateLimit({
 });
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/signup', authLimiter);
+app.use('/api/auth/forgot-password', authLimiter);
+app.use('/api/auth/reset-password', authLimiter);
+app.use('/api/auth/accept-invite', authLimiter);
 app.use('/api/auth/change-password', authLimiter);
 app.use('/api/onboarding/register', authLimiter);
 

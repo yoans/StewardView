@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { authAPI, backupsAPI } from '../services/api';
 
-const ROLES = ['admin', 'treasurer', 'elder', 'finance_committee', 'viewer'];
+const ROLES = ['admin', 'treasurer', 'viewer'];
 const ROLE_COLORS = {
   admin: 'bg-red-100 text-red-800',
   treasurer: 'bg-blue-100 text-blue-800',
@@ -39,7 +39,6 @@ export default function AdminPage({ user, tenant, onTenantUpdated }) {
   // New user form
   const [newEmail, setNewEmail] = useState('');
   const [newName, setNewName] = useState('');
-  const [newPassword, setNewPassword] = useState('');
   const [newRole, setNewRole] = useState('viewer');
 
   const loadUsers = async () => {
@@ -90,8 +89,8 @@ export default function AdminPage({ user, tenant, onTenantUpdated }) {
         await authAPI.deactivateUser(u.id);
         setSuccess('User deactivated');
       } else {
-        await authAPI.updateUser(u.id, { is_active: true });
-        setSuccess('User reactivated');
+        await authAPI.updateUser(u.id, { is_approved: true });
+        setSuccess(u.is_approved ? 'User reactivated' : 'User approved');
       }
       loadUsers();
     } catch (err) {
@@ -99,13 +98,35 @@ export default function AdminPage({ user, tenant, onTenantUpdated }) {
     }
   };
 
+  const handleApproveUser = async (userId) => {
+    setError(''); setSuccess('');
+    try {
+      await authAPI.updateUser(userId, { is_approved: true });
+      setSuccess('User approved');
+      loadUsers();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to approve user');
+    }
+  };
+
+  const handleResendInvite = async (userId) => {
+    setError(''); setSuccess('');
+    try {
+      const res = await authAPI.resendInvite(userId);
+      setSuccess(res.data.message || 'Setup link sent');
+      loadUsers();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to send setup link');
+    }
+  };
+
   const handleCreateUser = async (e) => {
     e.preventDefault();
     setError(''); setSuccess('');
     try {
-      await authAPI.createUser({ email: newEmail, name: newName, password: newPassword, role: newRole });
-      setSuccess('User created!');
-      setNewEmail(''); setNewName(''); setNewPassword(''); setNewRole('viewer');
+      await authAPI.createUser({ email: newEmail, name: newName, role: newRole });
+      setSuccess('Setup link sent. Approve the user after they choose a password.');
+      setNewEmail(''); setNewName(''); setNewRole('viewer');
       loadUsers();
       setTab('users');
     } catch (err) {
@@ -156,6 +177,20 @@ export default function AdminPage({ user, tenant, onTenantUpdated }) {
   };
 
   const adminCount = users.filter(u => u.role === 'admin' && u.is_active).length;
+
+  const userStatus = (u) => {
+    if (u.must_set_password) return 'Invited';
+    if (!u.is_active && !u.is_approved) return 'Pending approval';
+    if (!u.is_active) return 'Inactive';
+    return 'Active';
+  };
+
+  const statusClasses = (status) => ({
+    Active: 'bg-green-100 text-green-800',
+    Invited: 'bg-blue-100 text-blue-800',
+    'Pending approval': 'bg-yellow-100 text-yellow-800',
+    Inactive: 'bg-red-100 text-red-800',
+  }[status] || 'bg-gray-100 text-gray-700');
 
   if (user.role !== 'admin') {
     return (
@@ -222,12 +257,22 @@ export default function AdminPage({ user, tenant, onTenantUpdated }) {
                         </select>
                       </td>
                       <td className="py-3">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${u.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                          {u.is_active ? 'Active' : 'Inactive'}
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusClasses(userStatus(u))}`}>
+                          {userStatus(u)}
                         </span>
                       </td>
-                      <td className="py-3">
-                        {u.id !== user.id && (
+                      <td className="py-3 space-x-3">
+                        {!u.is_approved && u.id !== user.id && (
+                          <button className="text-xs text-green-600 hover:text-green-800" onClick={() => handleApproveUser(u.id)}>
+                            Approve
+                          </button>
+                        )}
+                        {u.must_set_password && u.id !== user.id && (
+                          <button className="text-xs text-blue-600 hover:text-blue-800" onClick={() => handleResendInvite(u.id)}>
+                            Resend setup link
+                          </button>
+                        )}
+                        {u.id !== user.id && u.is_approved && (
                           <button
                             className={`text-xs ${u.is_active ? 'text-red-600 hover:text-red-800' : 'text-green-600 hover:text-green-800'}`}
                             onClick={() => handleToggleActive(u)}
@@ -357,7 +402,8 @@ export default function AdminPage({ user, tenant, onTenantUpdated }) {
           {/* Create User Tab */}
           {tab === 'create' && (
             <div className="card max-w-lg">
-              <h3 className="text-lg font-bold mb-4">Create New User</h3>
+              <h3 className="text-lg font-bold mb-2">Invite User</h3>
+              <p className="text-sm text-gray-500 mb-4">The user will receive a temporary setup link by email and must be approved before signing in.</p>
               <form onSubmit={handleCreateUser} className="space-y-4">
                 <div>
                   <label className="label">Full Name</label>
@@ -368,16 +414,12 @@ export default function AdminPage({ user, tenant, onTenantUpdated }) {
                   <input type="email" className="input" value={newEmail} onChange={e => setNewEmail(e.target.value)} required />
                 </div>
                 <div>
-                  <label className="label">Password</label>
-                  <input type="password" className="input" value={newPassword} onChange={e => setNewPassword(e.target.value)} required minLength={8} />
-                </div>
-                <div>
                   <label className="label">Role</label>
                   <select className="input" value={newRole} onChange={e => setNewRole(e.target.value)}>
                     {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
                   </select>
                 </div>
-                <button type="submit" className="btn-primary">Create User</button>
+                <button type="submit" className="btn-primary">Send Setup Link</button>
               </form>
             </div>
           )}
