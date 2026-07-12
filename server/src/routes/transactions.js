@@ -105,7 +105,7 @@ router.post('/', authenticate, requireTenant, authorize('admin', 'treasurer', 'f
 });
 
 // PUT /api/transactions/:id
-router.put('/:id', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
+router.put('/:id', authenticate, requireTenant, authorize('admin', 'treasurer', 'finance_committee'), async (req, res) => {
   try {
     const existing = await db('transactions').where({ id: req.params.id, tenant_id: req.tenantId }).first();
     if (!existing) return res.status(404).json({ error: 'Transaction not found' });
@@ -113,6 +113,17 @@ router.put('/:id', authenticate, requireTenant, authorize('admin', 'treasurer'),
     const updates = {};
     const fields = ['type', 'amount', 'date', 'description', 'payee_payer', 'check_number', 'category_id', 'bank_account_id', 'fund_id', 'status', 'notes'];
     fields.forEach(f => { if (req.body[f] !== undefined) updates[f] = req.body[f]; });
+
+    if (updates.status !== undefined) {
+      const allowed = ['pending', 'cleared', 'reconciled', 'void'];
+      if (!allowed.includes(updates.status)) {
+        return res.status(400).json({ error: 'Invalid status' });
+      }
+      if (existing.status === 'void' && updates.status !== 'void') {
+        return res.status(400).json({ error: 'Voided transactions cannot be reopened' });
+      }
+    }
+
     updates.updated_at = new Date().toISOString();
 
     await db('transactions').where({ id: req.params.id }).update(updates);

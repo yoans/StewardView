@@ -62,7 +62,24 @@ export default function TransactionsPage({ user }) {
     } catch (err) { alert('Failed to void transaction'); }
   };
 
+  const handleStatusChange = async (id, status) => {
+    const prev = transactions.find(t => t.id === id)?.status;
+    if (!status || status === prev) return;
+    setTransactions(list => list.map(t => t.id === id ? { ...t, status } : t));
+    try {
+      await transactionsAPI.update(id, { status });
+    } catch (err) {
+      setTransactions(list => list.map(t => t.id === id ? { ...t, status: prev } : t));
+      alert(err.response?.data?.error || 'Failed to update status');
+    }
+  };
+
   const filteredCategories = categories.filter(c => !form.type || c.type === form.type);
+
+  const statusLabel = (status) => {
+    if (status === 'cleared') return 'complete';
+    return status;
+  };
 
   return (
     <div>
@@ -183,7 +200,22 @@ export default function TransactionsPage({ user }) {
                   <td className="py-2 text-gray-600">{txn.payee_payer || '—'}</td>
                   <td className="py-2 text-gray-600">{txn.category_name || '—'}</td>
                   <td className="py-2 text-gray-600">{txn.fund_name || '—'}</td>
-                  <td className="py-2"><span className={`badge-${txn.status}`}>{txn.status}</span></td>
+                  <td className="py-2">
+                    {canEdit && txn.status !== 'void' ? (
+                      <select
+                        className="input text-xs py-1 px-2 w-auto min-w-[7.5rem]"
+                        value={txn.status}
+                        onChange={(e) => handleStatusChange(txn.id, e.target.value)}
+                        aria-label="Transaction status"
+                      >
+                        <option value="pending">pending</option>
+                        <option value="cleared">complete</option>
+                        <option value="reconciled">reconciled</option>
+                      </select>
+                    ) : (
+                      <span className={`badge-${txn.status}`}>{statusLabel(txn.status)}</span>
+                    )}
+                  </td>
                   <td className={`py-2 text-right font-medium ${txn.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
                     {txn.type === 'income' ? '+' : '-'}{fmt(txn.amount)}
                   </td>
