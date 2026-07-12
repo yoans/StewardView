@@ -47,7 +47,19 @@ app.use(cors({ origin: corsOrigins, credentials: true }));
 // Raw body required for Stripe webhook signature verification (must come BEFORE express.json)
 app.use('/api/onboarding/webhook', express.raw({ type: 'application/json' }));
 
-app.use(express.json());
+// Allow larger JSON bodies for Givelify CSV paste imports (default 100kb is too small)
+app.use(express.json({ limit: '5mb' }));
+app.use(express.urlencoded({ extended: true, limit: '5mb' }));
+
+app.use((err, req, res, next) => {
+  if (err?.type === 'entity.too.large') {
+    return res.status(413).json({
+      error: 'Import is too large. Try a smaller date range, or split the CSV into smaller batches.',
+    });
+  }
+  return next(err);
+});
+
 // Skip health check pings from logs; use concise format in dev, minimal in prod
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'short' : 'dev', {
   skip: (req) => req.path === '/api/health',
