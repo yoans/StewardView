@@ -25,3 +25,18 @@ export function formatDate(value) {
 
   return text;
 }
+
+/** User-facing transaction status label + badge class. */
+export function transactionStatusDisplay(status) {
+  switch (status) {
+    case 'pending':
+      return { label: 'Needs review', badge: 'badge-pending' };
+    case 'cleared':
+    case 'reconciled':
+      return { label: 'Complete', badge: 'badge-cleared' };
+    case 'void':
+      return { label: 'Canceled', badge: 'badge-void' };
+    default:
+      return { label: status || '—', badge: 'badge-pending' };
+  }
+}

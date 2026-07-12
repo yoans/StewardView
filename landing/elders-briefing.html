@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StewardView — Briefing for Elders &amp; Trustees</title>
+  <link rel="icon" type="image/svg+xml" href="logo.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #101748;
+      --ink-soft: #2a3366;
+      --paper: #f7f5f0;
+      --paper-deep: #ebe6db;
+      --gold: #c7a10e;
+      --gold-bright: #e6c31b;
+      --line: rgba(16, 23, 72, 0.12);
+      --muted: rgba(16, 23, 72, 0.62);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      background: #0c1238;
+      color: var(--ink);
+      font-family: Outfit, system-ui, sans-serif;
+    }
+
+    .deck {
+      height: 100%;
+      display: grid;
+      place-items: center;
+      padding: 1.25rem;
+    }
+
+    .slide {
+      display: none;
+      width: min(1100px, 100%);
+      min-height: min(620px, calc(100vh - 5.5rem));
+      background:
+        radial-gradient(ellipse 80% 60% at 100% 0%, rgba(199, 161, 14, 0.12), transparent 55%),
+        linear-gradient(160deg, #fbfaf7 0%, var(--paper) 55%, var(--paper-deep) 100%);
+      border-radius: 1.25rem;
+      padding: clamp(1.75rem, 4vw, 3.25rem);
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .slide.active { display: flex; flex-direction: column; }
+
+    .slide::before {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 6px;
+      background: linear-gradient(180deg, var(--gold-bright), var(--gold));
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      margin-bottom: 1.75rem;
+    }
+
+    .brand img {
+      height: 2.25rem;
+      width: auto;
+      background: #fff;
+      border-radius: 0.45rem;
+      padding: 0.2rem;
+    }
+
+    .brand-name {
+      font-family: Fraunces, Georgia, serif;
+      font-weight: 700;
+      font-size: 1.35rem;
+      letter-spacing: -0.02em;
+      color: var(--ink);
+    }
+
+    .brand-name span { color: var(--gold); }
+
+    .eyebrow {
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 0.75rem;
+    }
+
+    h1, h2 {
+      font-family: Fraunces, Georgia, serif;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      color: var(--ink);
+    }
+
+    h1 { font-size: clamp(2.2rem, 5vw, 3.4rem); max-width: 16ch; margin-bottom: 1rem; }
+    h2 { font-size: clamp(1.7rem, 3.5vw, 2.4rem); margin-bottom: 0.85rem; }
+
+    .lead {
+      font-size: clamp(1.05rem, 2vw, 1.25rem);
+      line-height: 1.55;
+      color: var(--ink-soft);
+      max-width: 42rem;
+    }
+
+    .body {
+      font-size: 1.05rem;
+      line-height: 1.55;
+      color: var(--muted);
+      max-width: 44rem;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1rem;
+      margin-top: 1.75rem;
+    }
+
+    .card {
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid var(--line);
+      border-radius: 1rem;
+      padding: 1.15rem 1.25rem;
+    }
+
+    .card h3 {
+      font-family: Fraunces, Georgia, serif;
+      font-size: 1.15rem;
+      margin-bottom: 0.4rem;
+      color: var(--ink);
+    }
+
+    .card p { font-size: 0.98rem; color: var(--muted); line-height: 1.45; }
+
+    .list {
+      margin-top: 1.35rem;
+      display: grid;
+      gap: 0.75rem;
+      max-width: 40rem;
+    }
+
+    .list li {
+      list-style: none;
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.75rem;
+      align-items: start;
+      font-size: 1.05rem;
+      color: var(--ink-soft);
+      line-height: 1.45;
+    }
+
+    .list li::before {
+      content: "";
+      width: 0.65rem;
+      height: 0.65rem;
+      margin-top: 0.4rem;
+      border-radius: 999px;
+      background: var(--gold);
+      box-shadow: 0 0 0 4px rgba(199, 161, 14, 0.18);
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.75rem;
+      margin-top: 1.75rem;
+    }
+
+    @media (max-width: 800px) {
+      .flow { grid-template-columns: 1fr; }
+    }
+
+    .step {
+      background: var(--ink);
+      color: #f7f5f0;
+      border-radius: 1rem;
+      padding: 1.15rem 1.2rem;
+      min-height: 9.5rem;
+    }
+
+    .step .n {
+      font-size: 0.75rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--gold-bright);
+      margin-bottom: 0.55rem;
+    }
+
+    .step strong {
+      display: block;
+      font-family: Fraunces, Georgia, serif;
+      font-size: 1.2rem;
+      margin-bottom: 0.35rem;
+    }
+
+    .step p { color: rgba(247, 245, 240, 0.75); font-size: 0.95rem; line-height: 1.4; }
+
+    .callout {
+      margin-top: auto;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--line);
+      font-size: 0.98rem;
+      color: var(--ink-soft);
+    }
+
+    .callout strong { color: var(--ink); }
+
+    .controls {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0.85rem;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 0.75rem;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    .controls > * { pointer-events: auto; }
+
+    .nav-btn {
+      border: 0;
+      background: rgba(255, 255, 255, 0.12);
+      color: #fff;
+      border-radius: 999px;
+      padding: 0.55rem 1rem;
+      font: inherit;
+      font-size: 0.9rem;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+    }
+
+    .nav-btn:hover { background: rgba(255, 255, 255, 0.2); }
+
+    .dots {
+      display: flex;
+      gap: 0.4rem;
+      padding: 0.4rem 0.65rem;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .dot {
+      width: 0.45rem;
+      height: 0.45rem;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.35);
+      border: 0;
+      cursor: pointer;
+      padding: 0;
+    }
+
+    .dot.active { background: var(--gold-bright); width: 1.1rem; }
+
+    .hint {
+      position: fixed;
+      top: 0.85rem;
+      right: 1rem;
+      color: rgba(255, 255, 255, 0.55);
+      font-size: 0.8rem;
+    }
+
+    .title-slide .brand { margin-bottom: 2.5rem; }
+    .title-slide h1 { max-width: 14ch; }
+    .audience {
+      display: inline-block;
+      margin-top: 1.5rem;
+      padding: 0.45rem 0.85rem;
+      border-radius: 999px;
+      background: rgba(16, 23, 72, 0.08);
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--ink);
+    }
+  </style>
+</head>
+<body>
+  <p class="hint">Arrow keys or click to advance · Esc for overview</p>
+
+  <div class="deck" id="deck">
+    <!-- 1 -->
+    <section class="slide title-slide active" data-slide="0">
+      <div class="brand">
+        <img src="logo.svg" alt="" />
+        <div class="brand-name">Steward<span>View</span></div>
+      </div>
+      <p class="eyebrow">Elder &amp; Trustee Briefing</p>
+      <h1>Clear sight for faithful stewardship</h1>
+      <p class="lead">
+        StewardView is our church finance workspace — so elders and trustees can see giving,
+        budgets, and earmarked funds without digging through spreadsheets.
+      </p>
+      <p class="audience">Most of you will have View access</p>
+    </section>
+
+    <!-- 2 -->
+    <section class="slide" data-slide="1">
+      <div class="brand">
+        <img src="logo.svg" alt="" />
+        <div class="brand-name">Steward<span>View</span></div>
+      </div>
+      <p class="eyebrow">Why this matters</p>
+      <h2>You help decide how we spend. You should see the same picture.</h2>
+      <p class="body">
+        When ministries ask for support, or when we set next year’s budget, the conversation
+        is stronger if everyone can look at the same numbers — income, expenses, and money
+        set aside for a purpose.
+      </p>
+      <div class="grid-2">
+        <div class="card">
+          <h3>Before</h3>
+          <p>Scattered reports, delayed updates, and “trust me” summaries that are hard to verify in a meeting.</p>
+        </div>
+        <div class="card">
+          <h3>With StewardView</h3>
+          <p>One place to review transactions, budget vs. actual, and earmarked fund balances — anytime you log in.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3 -->
+    <section class="slide" data-slide="2">
+      <div class="brand">
+        <img src="logo.svg" alt="" />
+        <div class="brand-name">Steward<span>View</span></div>
+      </div>
+      <p class="eyebrow">Your access</p>
+      <h2>View access is enough for oversight</h2>
+      <p class="body">
+        Treasurers and admins enter the data. Elders and trustees mainly <strong>read and ask good questions</strong>.
+        That keeps the books controlled while keeping leadership informed.
+      </p>
+      <ul class="list">
+        <li>See the dashboard: bank balances, recent activity, fund totals</li>
+        <li>Browse transactions and monthly reports</li>
+        <li>Compare budget vs. actual by category</li>
+        <li>Open each earmarked fund and see what’s in it</li>
+      </ul>
+      <p class="callout"><strong>You don’t need to “run” the books</strong> — you need a clear window into them.</p>
+    </section>
+
+    <!-- 4 -->
+    <section class="slide" data-slide="3">
+      <div class="brand">
+        <img src="logo.svg" alt="" />
+        <div class="brand-name">Steward<span>View</span></div>
+      </div>
+      <p class="eyebrow">Categories</p>
+      <h2>Categories answer: “What kind of spending or giving is this?”</h2>
+      <p class="body">
+        Every dollar is tagged to a category so we can see patterns — not just a pile of deposits and checks.
+      </p>
+      <div class="grid-2">
+        <div class="card">
+          <h3>Income examples</h3>
+          <p>Tithes &amp; Offerings · Directed Contributions · Special Events · Interest</p>
+        </div>
+        <div class="card">
+          <h3>Expense examples</h3>
+          <p>Utilities · Missions · Staff · Building · Benevolence · Ministry programs</p>
+        </div>
+      </div>
+      <p class="callout">
+        <strong>In meetings:</strong> when we discuss “should we spend more on X?”, look at that category’s budget and actuals first.
+      </p>
+    </section>
+
+    <!-- 5 -->
+    <section class="slide" data-slide="4">
+      <div class="brand">
+        <img src="logo.svg" alt="" />
+        <div class="brand-name">Steward<span>View</span></div>
+      </div>
+      <p class="eyebrow">Earmarked funds</p>
+      <h2>Funds answer: “Is this money already promised to a purpose?”</h2>
+      <p class="body">
+        Categories classify activity. <strong>Earmarked funds</strong> hold savings and gifts that belong to a specific cause —
+        like a building reserve, missions, youth, or benevolence.
+      </p>
+      <div class="flow">
+        <div class="step">
+          <div class="n">Step 1</div>
+          <strong>Someone gives</strong>
+          <p>Online (Givelify) or otherwise, often toward an envelope or campaign.</p>
+        </div>
+        <div class="step">
+          <div class="n">Step 2</div>
+          <strong>We earmark</strong>
+          <p>The gift is mapped to the right fund so it isn’t mixed into unrestricted cash.</p>
+        </div>
+        <div class="step">
+          <div class="n">Step 3</div>
+          <strong>You can see it</strong>
+          <p>Fund balances and history show what we can spend for that purpose.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6 -->
+    <section class="slide" data-slide="5">
+      <div class="brand">
+        <img src="logo.svg" alt="" />
+        <div class="brand-name">Steward<span>View</span></div>
+      </div>
+      <p class="eyebrow">Contributions</p>
+      <h2>Watch how giving is directed</h2>
+      <p class="body">
+        StewardView tracks contributions — including Givelify imports — and shows whether gifts went to
+        the General Fund or to a directed / earmarked fund.
+      </p>
+      <ul class="list">
+        <li><strong>General giving</strong> supports the operating budget (Tithes &amp; Offerings)</li>
+        <li><strong>Directed giving</strong> is set aside for a named purpose (Directed Contributions → fund)</li>
+        <li><strong>Pending earmarks</strong> mean a gift still needs to be assigned to a fund</li>
+      </ul>
+      <p class="callout">
+        This is how we honor donor intent and avoid spending restricted gifts on something else.
+      </p>
+    </section>
+
+    <!-- 7 -->
+    <section class="slide" data-slide="6">
+      <div class="brand">
+        <img src="logo.svg" alt="" />
+        <div class="brand-name">Steward<span>View</span></div>
+      </div>
+      <p class="eyebrow">Budget oversight</p>
+      <h2>Budget vs. Actual is your monthly scoreboard</h2>
+      <p class="body">
+        Leadership builds the plan. StewardView shows how we’re tracking — by category, month, and year-to-date.
+      </p>
+      <div class="grid-2">
+        <div class="card">
+          <h3>Ask here</h3>
+          <p>“Are we over in utilities?” “Is missions giving where we hoped?” “Can the building fund cover this repair?”</p>
+        </div>
+        <div class="card">
+          <h3>Decide with facts</h3>
+          <p>Approve spending against available budget and available earmarked balances — not guesswork.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 8 -->
+    <section class="slide" data-slide="7">
+      <div class="brand">
+        <img src="logo.svg" alt="" />
+        <div class="brand-name">Steward<span>View</span></div>
+      </div>
+      <p class="eyebrow">How you’ll use it</p>
+      <h2>A simple rhythm for elders &amp; trustees</h2>
+      <ul class="list">
+        <li><strong>Before a meeting</strong> — open Budget and Funds; note anything that looks off</li>
+        <li><strong>During discussion</strong> — pull up the category or earmarked fund on screen</li>
+        <li><strong>When approving spend</strong> — confirm: budget room + correct fund (if restricted)</li>
+        <li><strong>Afterward</strong> — leave the bookkeeping to treasurer/admin; keep asking for clarity</li>
+      </ul>
+      <p class="callout"><strong>View access = informed voice.</strong> You steward decisions; the system holds the detail.</p>
+    </section>
+
+    <!-- 9 -->
+    <section class="slide" data-slide="8">
+      <div class="brand">
+        <img src="logo.svg" alt="" />
+        <div class="brand-name">Steward<span>View</span></div>
+      </div>
+      <p class="eyebrow">In one sentence</p>
+      <h2>StewardView helps us spend wisely because we can see clearly.</h2>
+      <p class="lead" style="margin-top: 0.75rem;">
+        Categories show the nature of the money. Earmarked funds show the purpose.
+        Budgets show the plan. Together, they support faithful decisions by elders and trustees.
+      </p>
+      <div class="grid-2" style="margin-top: 2rem;">
+        <div class="card">
+          <h3>Next step</h3>
+          <p>Log in with your viewer account and click through Dashboard → Budget → Funds once before the next meeting.</p>
+        </div>
+        <div class="card">
+          <h3>Questions?</h3>
+          <p>Ask the treasurer for a live walkthrough of one recent month — ten minutes is enough to get oriented.</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="controls">
+    <button class="nav-btn" type="button" id="prev">← Back</button>
+    <div class="dots" id="dots" aria-label="Slide navigation"></div>
+    <button class="nav-btn" type="button" id="next">Next →</button>
+  </div>
+
+  <script>
+    const slides = [...document.querySelectorAll('.slide')];
+    const dots = document.getElementById('dots');
+    let index = 0;
+
+    slides.forEach((_, i) => {
+      const b = document.createElement('button');
+      b.className = 'dot' + (i === 0 ? ' active' : '');
+      b.type = 'button';
+      b.setAttribute('aria-label', 'Go to slide ' + (i + 1));
+      b.addEventListener('click', () => go(i));
+      dots.appendChild(b);
+    });
+
+    function go(i) {
+      index = (i + slides.length) % slides.length;
+      slides.forEach((s, n) => s.classList.toggle('active', n === index));
+      [...dots.children].forEach((d, n) => d.classList.toggle('active', n === index));
+    }
+
+    document.getElementById('prev').addEventListener('click', () => go(index - 1));
+    document.getElementById('next').addEventListener('click', () => go(index + 1));
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
+        e.preventDefault();
+        go(index + 1);
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        e.preventDefault();
+        go(index - 1);
+      } else if (e.key === 'Home') {
+        go(0);
+      } else if (e.key === 'End') {
+        go(slides.length - 1);
+      }
+    });
+
+    document.getElementById('deck').addEventListener('click', (e) => {
+      if (e.target.closest('a, button')) return;
+      go(index + 1);
+    });
+  </script>
+</body>
+</html>

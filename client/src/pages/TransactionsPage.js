@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { transactionsAPI, categoriesAPI, fundsAPI } from '../services/api';
-import { formatDate } from '../utils/format';
+import { formatDate, transactionStatusDisplay } from '../utils/format';
 
 const fmt = (n) => parseFloat(n || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
@@ -54,21 +54,22 @@ export default function TransactionsPage({ user }) {
     }
   };
 
-  const handleVoid = async (id) => {
-    if (!window.confirm('Are you sure you want to void this transaction?')) return;
-    const reason = prompt('Reason for voiding:');
+  const handleCancel = async (id) => {
+    if (!window.confirm('Cancel this transaction?\n\nIt will stay in the list as Canceled and will not count toward totals. This is not a permanent delete.')) return;
+    const reason = window.prompt('Optional note (why it was canceled):') || 'Canceled from transactions list';
     try {
       await transactionsAPI.void(id, reason);
       loadData();
-    } catch (err) { alert('Failed to void transaction'); }
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to cancel transaction');
+    }
   };
 
-  const handleStatusChange = async (id, status) => {
+  const handleMarkComplete = async (id) => {
     const prev = transactions.find(t => t.id === id)?.status;
-    if (!status || status === prev) return;
-    setTransactions(list => list.map(t => t.id === id ? { ...t, status } : t));
+    setTransactions(list => list.map(t => t.id === id ? { ...t, status: 'cleared' } : t));
     try {
-      await transactionsAPI.update(id, { status });
+      await transactionsAPI.update(id, { status: 'cleared' });
     } catch (err) {
       setTransactions(list => list.map(t => t.id === id ? { ...t, status: prev } : t));
       alert(err.response?.data?.error || 'Failed to update status');
@@ -76,11 +77,6 @@ export default function TransactionsPage({ user }) {
   };
 
   const filteredCategories = categories.filter(c => !form.type || c.type === form.type);
-
-  const statusLabel = (status) => {
-    if (status === 'cleared') return 'complete';
-    return status;
-  };
 
   return (
     <div>
@@ -93,7 +89,6 @@ export default function TransactionsPage({ user }) {
         )}
       </div>
 
-      {/* New Transaction Form */}
       {showForm && (
         <div className="card mb-6">
           <h3 className="text-lg font-bold mb-4">Record New Transaction</h3>
@@ -150,7 +145,6 @@ export default function TransactionsPage({ user }) {
         </div>
       )}
 
-      {/* Filters */}
       <div className="card mb-6">
         <div className="flex flex-wrap gap-4 items-end">
           <div>
@@ -173,7 +167,6 @@ export default function TransactionsPage({ user }) {
         </div>
       </div>
 
-      {/* Transaction Table */}
       <div className="card overflow-x-auto">
         {loading ? (
           <p className="text-center py-8 text-gray-500">Loading...</p>
@@ -193,42 +186,51 @@ export default function TransactionsPage({ user }) {
               </tr>
             </thead>
             <tbody>
-              {transactions.map(txn => (
-                <tr key={txn.id} className="border-b last:border-0 hover:bg-gray-50">
-                  <td className="py-2 text-gray-600">{formatDate(txn.date)}</td>
-                  <td className="py-2 text-xs text-gray-400 font-mono">{txn.ref_number?.slice(0, 8)}</td>
-                  <td className="py-2 font-medium text-gray-900">{txn.description}</td>
-                  <td className="py-2 text-gray-600">{txn.payee_payer || '—'}</td>
-                  <td className="py-2 text-gray-600">{txn.category_name || '—'}</td>
-                  <td className="py-2 text-gray-600">{txn.fund_name || '—'}</td>
-                  <td className="py-2">
-                    {canEdit && txn.status !== 'void' ? (
-                      <select
-                        className="input text-xs py-1 px-2 w-auto min-w-[7.5rem]"
-                        value={txn.status}
-                        onChange={(e) => handleStatusChange(txn.id, e.target.value)}
-                        aria-label="Transaction status"
-                      >
-                        <option value="pending">pending</option>
-                        <option value="cleared">complete</option>
-                        <option value="reconciled">reconciled</option>
-                      </select>
-                    ) : (
-                      <span className={`badge-${txn.status}`}>{statusLabel(txn.status)}</span>
-                    )}
-                  </td>
-                  <td className={`py-2 text-right font-medium ${txn.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
-                    {txn.type === 'income' ? '+' : '-'}{fmt(txn.amount)}
-                  </td>
-                  {canEdit && (
+              {transactions.map(txn => {
+                const status = transactionStatusDisplay(txn.status);
+                const isCanceled = txn.status === 'void';
+                const needsReview = txn.status === 'pending';
+                return (
+                  <tr key={txn.id} className={`border-b last:border-0 hover:bg-gray-50 ${isCanceled ? 'opacity-60' : ''}`}>
+                    <td className="py-2 text-gray-600">{formatDate(txn.date)}</td>
+                    <td className="py-2 text-xs text-gray-400 font-mono">{txn.ref_number?.slice(0, 8)}</td>
+                    <td className="py-2 font-medium text-gray-900">{txn.description}</td>
+                    <td className="py-2 text-gray-600">{txn.payee_payer || '—'}</td>
+                    <td className="py-2 text-gray-600">{txn.category_name || '—'}</td>
+                    <td className="py-2 text-gray-600">{txn.fund_name || '—'}</td>
                     <td className="py-2">
-                      {txn.status !== 'void' && (
-                        <button className="text-xs text-red-500 hover:text-red-700" onClick={() => handleVoid(txn.id)}>Void</button>
-                      )}
+                      <span className={status.badge}>{status.label}</span>
                     </td>
-                  )}
-                </tr>
-              ))}
+                    <td className={`py-2 text-right font-medium ${txn.type === 'income' ? 'text-green-600' : 'text-red-600'} ${isCanceled ? 'line-through' : ''}`}>
+                      {txn.type === 'income' ? '+' : '-'}{fmt(txn.amount)}
+                    </td>
+                    {canEdit && (
+                      <td className="py-2">
+                        {!isCanceled && (
+                          <div className="flex items-center justify-end gap-3 whitespace-nowrap">
+                            {needsReview && (
+                              <button
+                                type="button"
+                                className="text-xs font-medium text-blue-600 hover:text-blue-800"
+                                onClick={() => handleMarkComplete(txn.id)}
+                              >
+                                Mark complete
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              className="text-xs text-red-500 hover:text-red-700"
+                              onClick={() => handleCancel(txn.id)}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
               {transactions.length === 0 && (
                 <tr><td colSpan="9" className="py-8 text-center text-gray-400">No transactions found</td></tr>
               )}

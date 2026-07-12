@@ -127,6 +127,7 @@ if (fs.existsSync(landingPath)) {
   app.get('/', (req, res) => res.sendFile(path.join(landingPath, 'index.html')));
   app.get('/privacy', (req, res) => res.sendFile(path.join(landingPath, 'privacy.html')));
   app.get('/terms', (req, res) => res.sendFile(path.join(landingPath, 'terms.html')));
+  app.get('/elders-briefing', (req, res) => res.sendFile(path.join(landingPath, 'elders-briefing.html')));
 }
 
 // Legacy app URLs now live under /app

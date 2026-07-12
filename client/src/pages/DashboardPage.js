@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { reportsAPI } from '../services/api';
-import { formatDate } from '../utils/format';
+import { formatDate, transactionStatusDisplay } from '../utils/format';
 
 const fmt = (n) => parseFloat(n || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
@@ -162,19 +162,22 @@ export default function DashboardPage({ tenant }) {
               </tr>
             </thead>
             <tbody>
-              {data.recent_transactions.map(txn => (
+              {data.recent_transactions.map(txn => {
+                const status = transactionStatusDisplay(txn.status);
+                return (
                 <tr key={txn.id} className="border-b last:border-0 hover:bg-gray-50">
                   <td className="py-2 text-gray-600">{formatDate(txn.date)}</td>
                   <td className="py-2 font-medium text-gray-900">{txn.description}</td>
                   <td className="py-2 text-gray-600">{txn.category_name}</td>
                   <td className="py-2">
-                    <span className={`badge-${txn.status}`}>{txn.status}</span>
+                    <span className={status.badge}>{status.label}</span>
                   </td>
                   <td className={`py-2 text-right font-medium ${txn.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
                     {txn.type === 'income' ? '+' : '-'}{fmt(txn.amount)}
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
