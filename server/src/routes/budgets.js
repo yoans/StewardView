@@ -4,6 +4,12 @@ const { authenticate, authorize } = require('../middleware/auth');
 const { requireTenant } = require('../middleware/tenant');
 const { logAudit } = require('../models/auditLog');
 
+/** Last calendar day of month as YYYY-MM-DD (no UTC shift). */
+function monthEndDate(year, month) {
+  const lastDay = new Date(year, month, 0).getDate();
+  return `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+}
+
 // GET /api/budgets?year=2026
 router.get('/', authenticate, requireTenant, async (req, res) => {
   try {
@@ -30,7 +36,7 @@ router.get('/vs-actual', authenticate, requireTenant, async (req, res) => {
     const month = parseInt(req.query.month) || new Date().getMonth() + 1;
 
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-    const endDate = new Date(year, month, 0).toISOString().slice(0, 10);
+    const endDate = monthEndDate(year, month);
 
     // Get budgets for the month
     const budgets = await db('budgets')
@@ -213,7 +219,7 @@ router.get('/ytd', authenticate, requireTenant, async (req, res) => {
     const currentMonth = new Date().getMonth() + 1;
 
     const startDate = `${year}-01-01`;
-    const endDate = new Date(year, currentMonth, 0).toISOString().slice(0, 10);
+    const endDate = monthEndDate(year, currentMonth);
 
     // YTD budgeted (sum months 1 through current)
     const ytdBudgets = await db('budgets')

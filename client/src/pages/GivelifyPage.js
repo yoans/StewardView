@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { givelifyAPI, fundsAPI } from '../services/api';
 
 const fmt = (n) => parseFloat(n || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
@@ -11,6 +11,8 @@ export default function GivelifyPage({ user }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef(null);
 
   // Import form
   const [csvText, setCsvText] = useState('');
@@ -27,7 +29,7 @@ export default function GivelifyPage({ user }) {
     setLoading(true);
     try {
       const [contribRes, fundsRes, summRes] = await Promise.all([
-        givelifyAPI.list({}),
+        givelifyAPI.list({ limit: 500 }),
         fundsAPI.list(),
         givelifyAPI.summary(),
       ]);
@@ -47,38 +49,37 @@ export default function GivelifyPage({ user }) {
 
   useEffect(() => { loadData(); loadEnvelopeMap(); }, []);
 
+  const handleFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setCsvText(String(reader.result || ''));
+      setError('');
+      setSuccess('');
+      setImportResult(null);
+    };
+    reader.onerror = () => setError('Could not read that file');
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
   const handleCSVImport = async () => {
     setError(''); setSuccess(''); setImportResult(null);
+    if (!csvText.trim()) { setError('Paste CSV text or choose a file first'); return; }
+
+    setImporting(true);
     try {
-      // Parse simple CSV: donor_name, amount, date, envelope, givelify_id
-      const lines = csvText.trim().split('\n');
-      if (lines.length < 2) { setError('CSV must have a header row and at least one data row'); return; }
-
-      const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/[^a-z_]/g, ''));
-      const contributions = [];
-
-      for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
-        const row = {};
-        headers.forEach((h, idx) => {
-          if (h.includes('donor') && h.includes('name')) row.donor_name = values[idx];
-          else if (h.includes('email')) row.donor_email = values[idx];
-          else if (h.includes('amount') || h.includes('total')) row.amount = values[idx]?.replace(/[$,]/g, '');
-          else if (h.includes('date')) row.date = values[idx];
-          else if (h.includes('envelope') || h.includes('fund') || h.includes('category')) row.envelope = values[idx];
-          else if (h.includes('id') || h.includes('transaction')) row.givelify_id = values[idx];
-        });
-        if (row.amount && row.date) contributions.push(row);
-      }
-
-      if (contributions.length === 0) { setError('No valid rows found'); return; }
-
-      const res = await givelifyAPI.import(contributions);
+      const res = await givelifyAPI.import(csvText);
       setImportResult(res.data);
-      setSuccess(`Imported ${res.data.imported} contributions (${res.data.auto_earmarked} auto-earmarked)`);
+      const pendingNote = res.data.pending ? `, ${res.data.pending} need manual earmark` : '';
+      setSuccess(`Imported ${res.data.imported} contributions (${res.data.auto_earmarked} auto-earmarked${pendingNote})`);
+      setCsvText('');
       loadData();
     } catch (err) {
       setError(err.response?.data?.error || 'Import failed');
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -86,7 +87,7 @@ export default function GivelifyPage({ user }) {
     setError(''); setSuccess('');
     try {
       await givelifyAPI.earmark(contribId, fundId);
-      setSuccess('Contribution earmarked successfully');
+      setSuccess('Contribution earmarked successfully — it will count toward budget actuals');
       loadData();
     } catch (err) {
       setError(err.response?.data?.error || 'Earmark failed');
@@ -96,7 +97,8 @@ export default function GivelifyPage({ user }) {
   const handleSaveEnvelopeMap = async () => {
     setError(''); setSuccess('');
     try {
-      await givelifyAPI.updateEnvelopeMap(envelopeMap);
+      const res = await givelifyAPI.updateEnvelopeMap(envelopeMap);
+      setEnvelopeMap(res.data.map || envelopeMap);
       setSuccess('Envelope mapping saved');
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to save mapping');
@@ -105,7 +107,7 @@ export default function GivelifyPage({ user }) {
 
   const addEnvelopeMapping = () => {
     if (newEnvelope && newFundName) {
-      setEnvelopeMap({ ...envelopeMap, [newEnvelope.toLowerCase()]: newFundName });
+      setEnvelopeMap({ ...envelopeMap, [newEnvelope.toLowerCase().trim()]: newFundName });
       setNewEnvelope('');
       setNewFundName('');
     }
@@ -122,7 +124,7 @@ export default function GivelifyPage({ user }) {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Givelify Contributions</h2>
-          <p className="text-gray-500 text-sm">Import and manage Givelify giving data with auto-earmarking</p>
+          <p className="text-gray-500 text-sm">Import giving CSV exports and auto-earmark to funds (feeds budget actuals)</p>
         </div>
         <div className="flex gap-2">
           <button className={tab === 'list' ? 'btn-primary text-sm' : 'btn-secondary text-sm'} onClick={() => setTab('list')}>Contributions</button>
@@ -174,7 +176,7 @@ export default function GivelifyPage({ user }) {
                     <tr><td colSpan="7" className="py-8 text-center text-gray-400">No Givelify contributions imported yet. Use "Import CSV" to get started.</td></tr>
                   ) : contributions.map(c => (
                     <tr key={c.id} className="border-b hover:bg-gray-50">
-                      <td className="py-2 text-gray-600">{c.date}</td>
+                      <td className="py-2 text-gray-600">{typeof c.date === 'string' ? c.date.slice(0, 10) : c.date}</td>
                       <td className="py-2 font-medium text-gray-900">{c.donor_name}</td>
                       <td className="py-2 text-gray-600">{c.envelope}</td>
                       <td className="py-2 text-right font-medium text-green-700">{fmt(c.amount)}</td>
@@ -210,30 +212,59 @@ export default function GivelifyPage({ user }) {
             <div className="card max-w-3xl">
               <h3 className="text-lg font-bold mb-2">Import from Givelify CSV</h3>
               <p className="text-sm text-gray-500 mb-4">
-                Export your giving data from Givelify's dashboard as CSV, then paste it below.
-                The system will auto-match envelopes to your earmarked funds.
+                Export the Donations report from Givelify (CSV), then upload the file or paste it below.
+                Envelopes/campaigns are matched to your funds; matched gifts become income transactions
+                under Tithes &amp; Offerings or Directed Contributions for budget vs actual.
               </p>
-              <p className="text-xs text-gray-400 mb-2">
-                Expected columns: donor_name, email, amount, date, envelope/category, transaction_id
+              <p className="text-xs text-gray-400 mb-3">
+                Accepts common columns: donor name (or first/last), email, amount / gross amount, date,
+                envelope / campaign / fund, donation ID. Quoted fields and commas in names are fine.
               </p>
+
+              <div className="flex gap-2 mb-3">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="hidden"
+                  onChange={handleFileSelect}
+                />
+                <button type="button" className="btn-secondary text-sm" onClick={() => fileInputRef.current?.click()}>
+                  Choose CSV file
+                </button>
+              </div>
+
               <textarea
                 className="input w-full h-48 font-mono text-xs"
-                placeholder={'donor_name,email,amount,date,envelope,transaction_id\nJohn Smith,john@email.com,100.00,2026-03-01,Missions,GV-12345'}
+                placeholder={'Donation ID,Donor Name,Email,Gross Amount,Date,Envelope\nGV-12345,John Smith,john@email.com,100.00,03/01/2026,Missions'}
                 value={csvText}
                 onChange={e => setCsvText(e.target.value)}
               />
-              <button className="btn-primary mt-3" onClick={handleCSVImport} disabled={!csvText.trim()}>
-                Import Contributions
+              <button className="btn-primary mt-3" onClick={handleCSVImport} disabled={!csvText.trim() || importing}>
+                {importing ? 'Importing…' : 'Import Contributions'}
               </button>
 
               {importResult && (
-                <div className="mt-4 p-4 bg-gray-50 rounded-lg text-sm">
+                <div className="mt-4 p-4 bg-gray-50 rounded-lg text-sm space-y-1">
                   <p className="font-medium">Import Results:</p>
                   <p className="text-green-700">Imported: {importResult.imported}</p>
                   <p className="text-blue-700">Auto-earmarked: {importResult.auto_earmarked}</p>
+                  {importResult.pending > 0 && (
+                    <p className="text-yellow-700">Pending earmark: {importResult.pending}</p>
+                  )}
                   <p className="text-gray-500">Skipped (duplicates): {importResult.skipped}</p>
                   {importResult.errors?.length > 0 && (
-                    <p className="text-red-600">Errors: {importResult.errors.length}</p>
+                    <div className="mt-2">
+                      <p className="text-red-600 font-medium">Errors: {importResult.errors.length}</p>
+                      <ul className="mt-1 max-h-40 overflow-y-auto text-xs text-red-700 space-y-1">
+                        {importResult.errors.slice(0, 25).map((e, idx) => (
+                          <li key={idx}>Row {e.row}: {e.error}</li>
+                        ))}
+                        {importResult.errors.length > 25 && (
+                          <li>…and {importResult.errors.length - 25} more</li>
+                        )}
+                      </ul>
+                    </div>
                   )}
                 </div>
               )}
@@ -245,7 +276,8 @@ export default function GivelifyPage({ user }) {
             <div className="card max-w-2xl">
               <h3 className="text-lg font-bold mb-2">Envelope → Fund Mapping</h3>
               <p className="text-sm text-gray-500 mb-4">
-                Configure how Givelify envelope names automatically map to your church funds.
+                Configure how Givelify envelope / campaign names map to your church funds.
+                Matching is case-insensitive and allows partial matches (e.g. &quot;missions&quot; matches &quot;Missions - March&quot;).
               </p>
 
               <div className="space-y-2 mb-4">
@@ -266,9 +298,12 @@ export default function GivelifyPage({ user }) {
                 </div>
                 <div className="flex-1">
                   <label className="label">Maps to Fund</label>
-                  <input type="text" className="input" placeholder="e.g. Missions Fund" value={newFundName} onChange={e => setNewFundName(e.target.value)} />
+                  <select className="input" value={newFundName} onChange={e => setNewFundName(e.target.value)}>
+                    <option value="">Select fund…</option>
+                    {funds.map(f => <option key={f.id} value={f.name}>{f.name}</option>)}
+                  </select>
                 </div>
-                <button className="btn-secondary" onClick={addEnvelopeMapping}>Add</button>
+                <button className="btn-secondary" onClick={addEnvelopeMapping} disabled={!newEnvelope || !newFundName}>Add</button>
               </div>
 
               <button className="btn-primary" onClick={handleSaveEnvelopeMap}>Save Mapping</button>
