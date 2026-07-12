@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { reportsAPI } from '../services/api';
+import { formatDate } from '../utils/format';
 
 const fmt = (n) => parseFloat(n || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
@@ -163,7 +164,7 @@ export default function DashboardPage({ tenant }) {
             <tbody>
               {data.recent_transactions.map(txn => (
                 <tr key={txn.id} className="border-b last:border-0 hover:bg-gray-50">
-                  <td className="py-2 text-gray-600">{txn.date}</td>
+                  <td className="py-2 text-gray-600">{formatDate(txn.date)}</td>
                   <td className="py-2 font-medium text-gray-900">{txn.description}</td>
                   <td className="py-2 text-gray-600">{txn.category_name}</td>
                   <td className="py-2">

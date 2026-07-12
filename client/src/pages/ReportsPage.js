@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { reportsAPI } from '../services/api';
+import { formatDate } from '../utils/format';
 
 const fmt = (n) => parseFloat(n || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 const MONTHS = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -74,7 +75,7 @@ export default function ReportsPage({ user }) {
         <div className="space-y-6">
           <div className="card bg-blue-50 border border-blue-200">
             <h3 className="text-xl font-bold text-blue-900">{report.title}</h3>
-            <p className="text-sm text-blue-600">Period: {report.period.start_date} to {report.period.end_date}</p>
+            <p className="text-sm text-blue-600">Period: {formatDate(report.period.start_date)} to {formatDate(report.period.end_date)}</p>
           </div>
 
           {/* Summary */}
@@ -191,7 +192,7 @@ export default function ReportsPage({ user }) {
               <tbody>
                 {report.transactions.map(txn => (
                   <tr key={txn.id} className="border-b last:border-0">
-                    <td className="py-2 text-gray-600">{txn.date}</td>
+                    <td className="py-2 text-gray-600">{formatDate(txn.date)}</td>
                     <td className="py-2 text-gray-900">{txn.description}</td>
                     <td className="py-2 text-gray-600">{txn.category_name || '—'}</td>
                     <td className="py-2 text-gray-600">{txn.fund_name || '—'}</td>

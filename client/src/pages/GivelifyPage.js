@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { givelifyAPI, fundsAPI } from '../services/api';
+import { formatDate } from '../utils/format';
 
 const fmt = (n) => parseFloat(n || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
@@ -176,7 +177,7 @@ export default function GivelifyPage({ user }) {
                     <tr><td colSpan="7" className="py-8 text-center text-gray-400">No Givelify contributions imported yet. Use "Import CSV" to get started.</td></tr>
                   ) : contributions.map(c => (
                     <tr key={c.id} className="border-b hover:bg-gray-50">
-                      <td className="py-2 text-gray-600">{typeof c.date === 'string' ? c.date.slice(0, 10) : c.date}</td>
+                      <td className="py-2 text-gray-600">{formatDate(c.date)}</td>
                       <td className="py-2 font-medium text-gray-900">{c.donor_name}</td>
                       <td className="py-2 text-gray-600">{c.envelope}</td>
                       <td className="py-2 text-right font-medium text-green-700">{fmt(c.amount)}</td>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { fundsAPI } from '../services/api';
+import { formatDate } from '../utils/format';
 
 const fmt = (n) => parseFloat(n || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
@@ -202,7 +203,7 @@ export default function FundsPage({ user }) {
                     <td className="py-2">{rt.to_fund_name}</td>
                     <td className="py-2 font-medium">{fmt(rt.amount)}</td>
                     <td className="py-2 text-gray-600">{rt.frequency} (day {rt.day_of_month || rt.day_of_week})</td>
-                    <td className="py-2 text-gray-600">{rt.next_run_date}</td>
+                    <td className="py-2 text-gray-600">{formatDate(rt.next_run_date)}</td>
                     <td className="py-2">
                       <button onClick={() => handleDeleteRecurring(rt.id)} className="text-red-500 hover:text-red-700 text-xs">Remove</button>
                     </td>
@@ -336,7 +337,7 @@ export default function FundsPage({ user }) {
                       const isPositive = ['contribution', 'transfer_in', 'adjustment_in'].includes(txn.type);
                       return (
                         <tr key={txn.id} className="border-b last:border-0">
-                          <td className="py-2 text-gray-600">{txn.date}</td>
+                          <td className="py-2 text-gray-600">{formatDate(txn.date)}</td>
                           <td className="py-2">
                             <span className={isPositive ? 'badge-income' : 'badge-expense'}>
                               {txn.type.replace(/_/g, ' ')}
