@@ -165,7 +165,8 @@ export default function GivelifyPage({ user }) {
                   <tr className="text-left text-gray-500 border-b">
                     <th className="pb-2">Date</th>
                     <th className="pb-2">Envelope</th>
-                    <th className="pb-2 text-right">Amount</th>
+                    <th className="pb-2 text-right">Gross</th>
+                    <th className="pb-2 text-right">Fee</th>
                     <th className="pb-2">Fund</th>
                     <th className="pb-2">Status</th>
                     {canEdit && <th className="pb-2">Action</th>}
@@ -173,12 +174,13 @@ export default function GivelifyPage({ user }) {
                 </thead>
                 <tbody>
                   {contributions.length === 0 ? (
-                    <tr><td colSpan="6" className="py-8 text-center text-gray-400">No Givelify contributions imported yet. Use "Import CSV" to get started.</td></tr>
+                    <tr><td colSpan="7" className="py-8 text-center text-gray-400">No Givelify contributions imported yet. Use "Import CSV" to get started.</td></tr>
                   ) : contributions.map(c => (
                     <tr key={c.id} className="border-b hover:bg-gray-50">
                       <td className="py-2 text-gray-600">{formatDate(c.date)}</td>
                       <td className="py-2 text-gray-900 font-medium">{c.envelope}</td>
                       <td className="py-2 text-right font-medium text-green-700">{fmt(c.amount)}</td>
+                      <td className="py-2 text-right text-orange-700">{c.fee_amount ? fmt(c.fee_amount) : '—'}</td>
                       <td className="py-2 text-gray-600">{c.fund_name || c.fund_mapping || '—'}</td>
                       <td className="py-2">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -216,11 +218,17 @@ export default function GivelifyPage({ user }) {
                 keep individual giver records in Givelify. Re-importing also clears any previously stored donor details.
               </p>
               <div className="mb-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
-                Givelify rows update <strong>funds and budget income</strong> — they are not bank cash.
-                When Givelify settles, your bank CSV will show a deposit; import that on Bank to update the book balance.
+                <p>
+                  Givelify imports are <strong>fund adjustments only</strong> — they do not create bank transactions.
+                  Checking changes when you import the bank deposit CSV.
+                </p>
+                <p className="mt-1">
+                  Gift <strong>gross</strong> credits the mapped fund; processing <strong>fees</strong> reduce the
+                  <strong> General Fund</strong>. Budget actuals still include these gifts.
+                </p>
               </div>
               <p className="text-xs text-gray-400 mb-3">
-                Uses amount / gross amount, date, envelope / campaign / fund, and donation ID. Names in the CSV are ignored.
+                Reads gross/amount, fee (or gross−net), date, envelope/campaign, and donation ID. Donor names are ignored.
               </p>
 
               <div className="flex gap-2 mb-3">
@@ -251,6 +259,11 @@ export default function GivelifyPage({ user }) {
                   <p className="font-medium">Import Results:</p>
                   <p className="text-green-700">Imported: {importResult.imported}</p>
                   <p className="text-blue-700">Auto-earmarked: {importResult.auto_earmarked}</p>
+                  {importResult.fees_posted > 0 && (
+                    <p className="text-orange-700">
+                      Fees to General Fund: {importResult.fees_posted} ({fmt(importResult.fee_total)})
+                    </p>
+                  )}
                   {importResult.pending > 0 && (
                     <p className="text-yellow-700">Pending earmark: {importResult.pending}</p>
                   )}

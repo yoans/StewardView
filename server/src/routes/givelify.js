@@ -1,10 +1,10 @@
 const router = require('express').Router();
-const { v4: uuidv4 } = require('uuid');
 const { parse } = require('csv-parse/sync');
 const db = require('../models/db');
 const { authenticate, authorize } = require('../middleware/auth');
 const { requireTenant } = require('../middleware/tenant');
 const { logAudit } = require('../models/auditLog');
+const { getGeneralFund, postFundAdjustment } = require('../utils/fundBank');
 
 // ── Givelify Envelope → Fund mapping rules ──────────────
 const DEFAULT_ENVELOPE_MAP = {
@@ -103,10 +103,25 @@ function normalizeContributionRow(raw) {
 
   const donor_email = getField(row, ['donor_email', 'email', 'email_address', 'e_mail']) || null;
 
-  // Prefer gross (what was given) for budget actuals; then amount; then net
-  const amount =
+  // Gross = what was given (credits the gift fund). Fee reduces General Fund.
+  // Prefer explicit fee; else derive from gross − net when both exist.
+  const gross =
     parseMoney(getField(row, ['gross_amount', 'gross', 'donation_amount', 'gift_amount', 'amount', 'total', 'total_amount'])) ??
     parseMoney(getField(row, ['net_amount', 'net']));
+  const net = parseMoney(getField(row, ['net_amount', 'net', 'net_donation', 'disbursement_amount']));
+  let fee = parseMoney(getField(row, [
+    'fee', 'fees', 'fee_amount', 'fees_amount', 'processing_fee', 'transaction_fee', 'givelify_fee',
+  ]));
+  if ((fee == null || fee < 0) && gross != null && net != null && gross >= net) {
+    fee = Math.round((gross - net) * 100) / 100;
+  }
+  if (fee == null || fee < 0) fee = 0;
+  fee = Math.round(Math.abs(fee) * 100) / 100;
+
+  const amount = gross != null ? Math.round(Math.abs(gross) * 100) / 100 : null;
+  const net_amount = net != null
+    ? Math.round(Math.abs(net) * 100) / 100
+    : (amount != null ? Math.round((amount - fee) * 100) / 100 : null);
 
   const date = normalizeDate(getField(row, [
     'donation_date', 'transaction_date', 'date', 'gift_date', 'giving_date',
@@ -126,6 +141,8 @@ function normalizeContributionRow(raw) {
     donor_name: donor_name || 'Anonymous',
     donor_email,
     amount,
+    fee,
+    net_amount,
     date,
     envelope,
     givelify_id,
@@ -210,7 +227,6 @@ async function resolveIncomeCategoryId(fund, tenantId, trx = db) {
 }
 
 /** StewardView does not store donor identity — keep that in Givelify. */
-const ANON_DONOR_LABEL = null;
 
 function sanitizeImportRaw(raw) {
   if (!raw || typeof raw !== 'object') return raw;
@@ -262,51 +278,86 @@ async function scrubExistingDonorPii(tenantId) {
     .update({ donor_name: null });
 }
 
-async function createEarmarkRecords({ gc, fund, amount, date, userId, tenantId, trx, notePrefix = 'Imported from Givelify' }) {
-  const ref_number = uuidv4();
-  const categoryId = await resolveIncomeCategoryId(fund, tenantId, trx);
-  const envelope = gc.envelope || 'General';
-
-  const [{ id: txnId }] = await trx('transactions').insert({
-    ref_number,
-    type: 'income',
-    amount,
-    date,
-    description: `Givelify - ${envelope}`,
-    payee_payer: 'Givelify',
-    category_id: categoryId,
-    bank_account_id: null, // Givelify gifts drive funds; cash hits the bank as a separate deposit
-    fund_id: fund.id,
-    status: 'cleared',
-    notes: `${notePrefix}. ID: ${gc.givelify_id || 'N/A'}`,
-    created_by: userId,
+async function resolveFeeExpenseCategoryId(tenantId, trx = db) {
+  const names = ['Givelify Fees', 'Processing Fees', 'Bank Fees', 'Fees', 'Office & Administration'];
+  for (const name of names) {
+    const cat = await trx('categories').where({ name, type: 'expense', tenant_id: tenantId, is_active: true }).first();
+    if (cat) return cat.id;
+  }
+  const [row] = await trx('categories').insert({
+    name: 'Givelify Fees',
+    type: 'expense',
+    description: 'Givelify / payment processing fees (absorbed by General Fund)',
+    is_active: true,
     tenant_id: tenantId,
   }).returning('id');
+  return row.id;
+}
 
-  await trx('fund_transactions').insert({
-    fund_id: fund.id,
-    transaction_id: txnId,
-    type: 'contribution',
+async function createEarmarkRecords({
+  gc,
+  fund,
+  amount,
+  fee = 0,
+  date,
+  userId,
+  tenantId,
+  trx,
+  notePrefix = 'Imported from Givelify',
+}) {
+  const categoryId = await resolveIncomeCategoryId(fund, tenantId, trx);
+  const envelope = gc.envelope || 'General';
+  const feeAmount = Math.round(Math.abs(parseFloat(fee) || 0) * 100) / 100;
+
+  // Gifts are fund adjustments only — not bank/cash transactions.
+  // Real cash arrives later as a bank deposit CSV row.
+  const fundTxnId = await postFundAdjustment({
+    fundId: fund.id,
+    fundTxnType: 'contribution',
     amount,
     date,
-    description: `Givelify: ${envelope}`,
-    donor_name: ANON_DONOR_LABEL,
-    created_by: userId,
-    tenant_id: tenantId,
+    description: `Givelify: ${envelope}${gc.givelify_id ? ` (${gc.givelify_id})` : ''} — ${notePrefix}`,
+    userId,
+    tenantId,
+    balanceDelta: amount,
+    trx,
   });
 
-  await trx('funds').where({ id: fund.id, tenant_id: tenantId }).increment('current_balance', amount);
+  let feeFundTxnId = null;
+  let feeCategoryId = null;
+  if (feeAmount > 0) {
+    const generalFund = await getGeneralFund(tenantId, trx);
+    if (!generalFund) {
+      throw new Error('General Fund is required to post Givelify fees');
+    }
+    feeCategoryId = await resolveFeeExpenseCategoryId(tenantId, trx);
+    feeFundTxnId = await postFundAdjustment({
+      fundId: generalFund.id,
+      fundTxnType: 'disbursement',
+      amount: feeAmount,
+      date,
+      description: `Givelify fee: ${envelope}${gc.givelify_id ? ` (${gc.givelify_id})` : ''} — absorbed by General Fund`,
+      userId,
+      tenantId,
+      balanceDelta: -feeAmount,
+      trx,
+    });
+  }
 
   await trx('givelify_contributions').where({ id: gc.id }).update({
     status: 'imported',
-    transaction_id: txnId,
+    transaction_id: null,
     fund_id: fund.id,
     fund_mapping: fund.name,
+    fee_amount: feeAmount,
+    net_amount: Math.round((amount - feeAmount) * 100) / 100,
+    income_category_id: categoryId,
+    fee_category_id: feeCategoryId,
     donor_name: null,
     donor_email: null,
   });
 
-  return txnId;
+  return { fundTxnId, feeFundTxnId, incomeCategoryId: categoryId, feeCategoryId };
 }
 
 function localMonthStart() {
@@ -328,6 +379,8 @@ router.get('/', authenticate, requireTenant, async (req, res) => {
         'givelify_contributions.id',
         'givelify_contributions.givelify_id',
         'givelify_contributions.amount',
+        'givelify_contributions.fee_amount',
+        'givelify_contributions.net_amount',
         'givelify_contributions.date',
         'givelify_contributions.envelope',
         'givelify_contributions.fund_mapping',
@@ -394,8 +447,18 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
       return res.status(400).json({ error: 'Provide a csv string or contributions array' });
     }
 
-    const results = { imported: 0, skipped: 0, auto_earmarked: 0, pending: 0, errors: [], scrubbed_existing_pii: true };
+    const results = {
+      imported: 0,
+      skipped: 0,
+      auto_earmarked: 0,
+      pending: 0,
+      fees_posted: 0,
+      fee_total: 0,
+      errors: [],
+      scrubbed_existing_pii: true,
+    };
     const seenIds = new Set();
+    const hasFeeColumns = await db.schema.hasColumn('givelify_contributions', 'fee_amount');
 
     // Refresh anonymity for any previously imported donor details (no seed / demo data)
     await scrubExistingDonorPii(req.tenantId);
@@ -415,6 +478,10 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
         }
 
         const amount = Math.round(Math.abs(c.amount) * 100) / 100;
+        const fee = Math.round(Math.abs(c.fee || 0) * 100) / 100;
+        const net_amount = c.net_amount != null
+          ? Math.round(Math.abs(c.net_amount) * 100) / 100
+          : Math.round((amount - fee) * 100) / 100;
 
         if (c.givelify_id) {
           if (seenIds.has(c.givelify_id)) {
@@ -434,13 +501,15 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
         const fund = await mapEnvelopeToFund(c.envelope, req.tenantId);
         const safeRaw = sanitizeImportRaw(c.raw || {
           amount: c.amount,
+          fee: c.fee,
+          net_amount: c.net_amount,
           date: c.date,
           envelope: c.envelope,
           givelify_id: c.givelify_id,
         });
 
         await db.transaction(async (trx) => {
-          const [{ id: gcId }] = await trx('givelify_contributions').insert({
+          const insertRow = {
             givelify_id: c.givelify_id || null,
             donor_name: null,
             donor_email: null,
@@ -452,10 +521,16 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
             status: 'pending',
             raw_data: JSON.stringify(safeRaw),
             tenant_id: req.tenantId,
-          }).returning('id');
+          };
+          if (hasFeeColumns) {
+            insertRow.fee_amount = fee;
+            insertRow.net_amount = net_amount;
+          }
+
+          const [{ id: gcId }] = await trx('givelify_contributions').insert(insertRow).returning('id');
 
           if (fund) {
-            await createEarmarkRecords({
+            const posted = await createEarmarkRecords({
               gc: {
                 id: gcId,
                 envelope: c.envelope,
@@ -463,6 +538,7 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
               },
               fund,
               amount,
+              fee,
               date: c.date,
               userId: req.user.id,
               tenantId: req.tenantId,
@@ -470,6 +546,10 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
               notePrefix: 'Auto-imported from Givelify',
             });
             results.auto_earmarked++;
+            if (posted.feeFundTxnId) {
+              results.fees_posted++;
+              results.fee_total = Math.round((results.fee_total + fee) * 100) / 100;
+            }
           } else {
             results.pending++;
           }
@@ -514,29 +594,32 @@ router.post('/:id/earmark', authenticate, requireTenant, authorize('admin', 'tre
     if (!fund) return res.status(404).json({ error: 'Fund not found' });
 
     const amount = parseFloat(gc.amount);
+    const fee = parseFloat(gc.fee_amount) || 0;
 
-    let txnId;
+    let fundTxnId;
     await db.transaction(async (trx) => {
-      txnId = await createEarmarkRecords({
+      const posted = await createEarmarkRecords({
         gc,
         fund,
         amount,
+        fee,
         date: gc.date,
         userId: req.user.id,
         tenantId: req.tenantId,
         trx,
         notePrefix: 'Manually earmarked from Givelify',
       });
+      fundTxnId = posted.fundTxnId;
     });
 
     await logAudit({
       entityType: 'givelify', entityId: gc.id, action: 'earmark',
-      newValues: { fund_id, fund_name: fund.name, amount },
+      newValues: { fund_id, fund_name: fund.name, amount, fee },
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
       tenantId: req.tenantId || req.user?.tenant_id || null,
     });
 
-    res.json({ message: 'Contribution earmarked and imported', transaction_id: txnId });
+    res.json({ message: 'Contribution earmarked to fund', fund_transaction_id: fundTxnId });
   } catch (err) {
     console.error('Givelify earmark error:', err);
     res.status(500).json({ error: 'Server error' });

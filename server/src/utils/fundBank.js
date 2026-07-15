@@ -29,7 +29,7 @@ async function applyFundMovement({
   const fundType = type === 'income' ? 'contribution' : 'disbursement';
   await trx('fund_transactions').insert({
     fund_id: fundId,
-    transaction_id: transactionId,
+    transaction_id: transactionId || null,
     type: fundType,
     amount,
     date,
@@ -41,6 +41,40 @@ async function applyFundMovement({
   await trx('funds')
     .where({ id: fundId, tenant_id: tenantId })
     .increment('current_balance', fundBalanceDelta(type, amount));
+}
+
+/**
+ * Fund-ledger adjustment with no cash/bank transaction row.
+ * Used for Givelify gifts (contribution) and fees (disbursement from General Fund).
+ */
+async function postFundAdjustment({
+  fundId,
+  fundTxnType,
+  amount,
+  date,
+  description,
+  userId,
+  tenantId,
+  balanceDelta,
+  trx = db,
+}) {
+  const [row] = await trx('fund_transactions').insert({
+    fund_id: fundId,
+    transaction_id: null,
+    type: fundTxnType,
+    amount,
+    date,
+    description,
+    donor_name: null,
+    created_by: userId,
+    tenant_id: tenantId,
+  }).returning('id');
+
+  await trx('funds')
+    .where({ id: fundId, tenant_id: tenantId })
+    .increment('current_balance', balanceDelta);
+
+  return row.id;
 }
 
 /**
@@ -116,13 +150,14 @@ function buildFundsBankReconciliation(funds, bankAccounts) {
     balanced,
     note: balanced
       ? 'Fund totals match checking book balance.'
-      : 'Fund totals should equal the checking book balance. A difference usually means pending Givelify deposits, expenses not on a fund, or starting balances that need alignment.',
+      : 'Fund totals should equal the checking book balance. Pending Givelify deposits (gifts already on funds), missing fees, unassigned expenses, or starting-balance misalignment are common causes.',
   };
 }
 
 module.exports = {
   getGeneralFund,
   applyFundMovement,
+  postFundAdjustment,
   reverseFundMovement,
   resolveExpenseFundId,
   buildFundsBankReconciliation,

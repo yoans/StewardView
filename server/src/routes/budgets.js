@@ -3,6 +3,7 @@ const db = require('../models/db');
 const { authenticate, authorize } = require('../middleware/auth');
 const { requireTenant } = require('../middleware/tenant');
 const { logAudit } = require('../models/auditLog');
+const { categoryActualsMap } = require('../utils/budgetActuals');
 
 /** Last calendar day of month as YYYY-MM-DD (no UTC shift). */
 function monthEndDate(year, month) {
@@ -44,17 +45,8 @@ router.get('/vs-actual', authenticate, requireTenant, async (req, res) => {
       .where({ 'budgets.year': year, 'budgets.month': month, 'budgets.tenant_id': req.tenantId })
       .select('budgets.*', 'categories.name as category_name', 'categories.type as category_type');
 
-    // Get actuals by category
-    const actuals = await db('transactions')
-      .where('status', '!=', 'void')
-      .where('tenant_id', req.tenantId)
-      .whereBetween('date', [startDate, endDate])
-      .groupBy('category_id')
-      .select('category_id')
-      .sum('amount as actual_amount');
-
-    const actualMap = {};
-    actuals.forEach(a => { actualMap[a.category_id] = parseFloat(a.actual_amount) || 0; });
+    // Get actuals by category (bank/cash txns + Givelify fund gifts/fees)
+    const actualMap = await categoryActualsMap(req.tenantId, startDate, endDate);
 
     const comparison = budgets.map(b => ({
       category_id: b.category_id,
@@ -236,17 +228,8 @@ router.get('/ytd', authenticate, requireTenant, async (req, res) => {
       .select('budgets.category_id', 'categories.name as category_name', 'categories.type as category_type')
       .sum('budgets.budgeted_amount as ytd_budgeted');
 
-    // YTD actuals
-    const ytdActuals = await db('transactions')
-      .where('status', '!=', 'void')
-      .where('tenant_id', req.tenantId)
-      .whereBetween('date', [startDate, endDate])
-      .groupBy('category_id')
-      .select('category_id')
-      .sum('amount as ytd_actual');
-
-    const actualMap = {};
-    ytdActuals.forEach(a => { actualMap[a.category_id] = parseFloat(a.ytd_actual) || 0; });
+    // YTD actuals (bank/cash + Givelify fund gifts/fees)
+    const actualMap = await categoryActualsMap(req.tenantId, startDate, endDate);
 
     const comparison = ytdBudgets.map(b => ({
       category_id: b.category_id,

@@ -24,6 +24,17 @@ router.get('/', authenticate, requireTenant, async (req, res) => {
         'bank_accounts.name as account_name'
       )
       .where('transactions.tenant_id', req.tenantId)
+      // Transactions page = cash/bank activity. Givelify gifts are fund adjustments.
+      .where(function () {
+        this.whereNotNull('transactions.bank_account_id')
+          .orWhere(function () {
+            this.whereNull('transactions.bank_account_id')
+              .andWhere((q) => {
+                q.whereNull('transactions.payee_payer').orWhere('transactions.payee_payer', '!=', 'Givelify');
+              })
+              .andWhere('transactions.description', 'not ilike', 'Givelify%');
+          });
+      })
       .orderBy('transactions.date', 'desc')
       .limit(limit)
       .offset(offset);
