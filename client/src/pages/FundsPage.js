@@ -151,7 +151,7 @@ export default function FundsPage({ user }) {
             </div>
             <div className="flex items-center space-x-2 pt-6">
               <input type="checkbox" checked={form.is_restricted} onChange={e => setForm({...form, is_restricted: e.target.checked})} />
-              <label className="text-sm text-gray-700">Donor-Restricted Fund</label>
+              <label className="text-sm text-gray-700">Donor-designated fund</label>
             </div>
             <div className="flex items-end">
               <button type="submit" className="btn-primary">Create Fund</button>
@@ -245,7 +245,7 @@ export default function FundsPage({ user }) {
                   <h4 className="font-bold text-gray-900">{fund.name}</h4>
                   <p className="text-xs text-gray-500">{fund.description}</p>
                   {fund.is_restricted && (
-                    <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded mt-1 inline-block">Restricted</span>
+                    <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded mt-1 inline-block">Donor designated</span>
                   )}
                 </div>
                 <p className="text-lg font-bold text-green-700">{fmt(fund.current_balance)}</p>

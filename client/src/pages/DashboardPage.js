@@ -147,7 +147,7 @@ export default function DashboardPage({ tenant }) {
                   <div>
                     <p className="font-medium text-gray-900">
                       {fund.name}
-                      {fund.is_restricted ? <span className="ml-2 text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">Restricted</span> : null}
+                      {fund.is_restricted ? <span className="ml-2 text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">Donor designated</span> : null}
                     </p>
                     <p className="text-xs text-gray-500">{fund.description}</p>
                   </div>
