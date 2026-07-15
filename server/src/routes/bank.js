@@ -6,7 +6,7 @@ const { logAudit } = require('../models/auditLog');
 const multer = require('multer');
 const { parse } = require('csv-parse');
 const { v4: uuidv4 } = require('uuid');
-const { applyFundMovement, buildFundsBankReconciliation, resolveExpenseFundId } = require('../utils/fundBank');
+const { applyFundMovement, buildFundsBankReconciliation, resolveExpenseFundId, getGeneralFund } = require('../utils/fundBank');
 
 // Multer: memory storage, CSV only, 5 MB limit
 const upload = multer({
@@ -166,6 +166,21 @@ function resolveCashMovement(row) {
   return { amount, type, rawAmount, checkNumberFromTxn: checkNumber };
 }
 
+/**
+ * Givelify settlements are not a separate Fifth Third church account.
+ * After verification, Givelify ACH posts as "5/3 BANKCARD SYS" (Fifth Third owns
+ * their card processor / Vantiv). Early setup may show "Givelify, LLC".
+ * Note: other merchants (e.g. Toast) can also use 5/3 Bankcard — uncommon for churches.
+ */
+function looksLikeGivelifySettlement(...parts) {
+  const t = parts.filter(Boolean).join(' ').toLowerCase();
+  if (!t) return false;
+  if (t.includes('givelify')) return true;
+  if (/5\s*\/\s*3/.test(t) && /bankcard/.test(t)) return true;
+  if (/fifth\s*thirds?/.test(t) && /bankcard|vantiv|worldpay/.test(t)) return true;
+  return false;
+}
+
 async function sumBankMovements(tenantId, bankAccountId) {
   const income = await db('transactions')
     .where({ tenant_id: tenantId, bank_account_id: bankAccountId, type: 'income' })
@@ -298,9 +313,14 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
           null;
         const notes = String(getValue(row, ['notes', 'note'])).trim() || null;
 
-        // Debits (expenses) must hit a fund so spending shows against that fund.
-        // Bank income (e.g. Givelify deposit) does not credit a fund again.
+        // Fund assignment for bank rows:
+        // - Expenses → General Fund (default)
+        // - Givelify settlement (5/3 BANKCARD / Givelify) → no fund (gifts already on Givelify import)
+        // - Other deposits → General Fund (plate/manual); change on Transactions if needed
         let fundId = null;
+        let rowNotes = notes;
+        const isGivelifyDeposit = type === 'income' && looksLikeGivelifySettlement(description, payee);
+
         if (type === 'expense') {
           try {
             fundId = await resolveExpenseFundId(req.tenantId, null);
@@ -308,6 +328,16 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
             errors.push(`Row ${i + 2}: ${e.message}`);
             skipped++;
             continue;
+          }
+        } else if (type === 'income') {
+          if (isGivelifyDeposit) {
+            rowNotes = [notes, 'Likely Givelify settlement (5/3 BANKCARD / Fifth Third processor) — funds already counted on Givelify import']
+              .filter(Boolean)
+              .join(' | ')
+              .slice(0, 500);
+          } else {
+            const general = await getGeneralFund(req.tenantId);
+            if (general) fundId = general.id;
           }
         }
 
@@ -339,7 +369,7 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
             bank_account_id: account.id,
             fund_id: fundId,
             status: 'cleared',
-            notes,
+            notes: rowNotes,
             created_by: req.user.id,
             tenant_id: req.tenantId,
           }).returning('id');

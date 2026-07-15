@@ -148,6 +148,8 @@ router.put('/:id', authenticate, requireTenant, authorize('admin', 'treasurer', 
 
     const nextType = updates.type !== undefined ? updates.type : existing.type;
     let nextFundId = updates.fund_id !== undefined ? updates.fund_id : existing.fund_id;
+    if (nextFundId === '' || nextFundId === 'null') nextFundId = null;
+    if (updates.fund_id === '' || updates.fund_id === 'null') updates.fund_id = null;
     const nextAmount = updates.amount !== undefined ? updates.amount : existing.amount;
     const nextStatus = updates.status !== undefined ? updates.status : existing.status;
     const nextDate = updates.date !== undefined ? updates.date : existing.date;

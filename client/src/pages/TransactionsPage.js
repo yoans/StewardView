@@ -83,11 +83,14 @@ export default function TransactionsPage({ user }) {
   };
 
   const handleFundChange = async (txn, fundId) => {
-    if (!fundId || String(fundId) === String(txn.fund_id || '')) return;
+    const next = fundId ? parseInt(fundId, 10) : null;
+    if (String(next || '') === String(txn.fund_id || '')) return;
     try {
       await transactionsAPI.update(txn.id, {
-        fund_id: parseInt(fundId, 10),
-        change_reason: 'Assigned spending to fund',
+        fund_id: next,
+        change_reason: next
+          ? 'Assigned deposit/spend to fund'
+          : 'Cleared fund (e.g. Givelify settlement — already on funds)',
       });
       loadData();
     } catch (err) {
@@ -160,13 +163,13 @@ export default function TransactionsPage({ user }) {
                 onChange={e => setForm({...form, fund_id: e.target.value})}
                 required={form.type === 'expense'}
               >
-                {form.type !== 'expense' && <option value="">— Default (General Fund) —</option>}
+                <option value="">{form.type === 'expense' ? '— General Fund —' : '— None —'}</option>
                 {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
               </select>
               <p className="text-xs text-gray-500 mt-1">
                 {form.type === 'expense'
-                  ? 'Debits reduce the selected fund (General Fund unless you pick another).'
-                  : 'Income credits a fund when selected; Givelify gifts already update funds on import.'}
+                  ? 'Debits reduce the selected fund (defaults to General Fund).'
+                  : 'Tag plate/other contributions to a fund. Leave None for Givelify bank settlements (already counted on Givelify import).'}
               </p>
             </div>
             <div>
@@ -237,17 +240,21 @@ export default function TransactionsPage({ user }) {
                     <td className="py-2 text-gray-600">{txn.payee_payer || '—'}</td>
                     <td className="py-2 text-gray-600">{txn.category_name || '—'}</td>
                     <td className="py-2 text-gray-600">
-                      {canEdit && !isCanceled && txn.type === 'expense' ? (
+                      {canEdit && !isCanceled ? (
                         <select
-                          className="input py-1 text-sm min-w-[9rem]"
-                          value={txn.fund_id || generalFundId || ''}
+                          className="input py-1 text-sm min-w-[10rem]"
+                          value={txn.fund_id || ''}
                           onChange={(e) => handleFundChange(txn, e.target.value)}
-                          title="Fund this debit spends from"
+                          title={txn.type === 'income' ? 'Fund this deposit credits' : 'Fund this debit spends from'}
                         >
+                          <option value="">{txn.type === 'expense' ? '— General Fund —' : '— None —'}</option>
                           {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                         </select>
                       ) : (
                         txn.fund_name || '—'
+                      )}
+                      {txn.type === 'income' && !txn.fund_id && /givelify|5\/3|bankcard/i.test(`${txn.description || ''} ${txn.notes || ''}`) && (
+                        <p className="text-[10px] text-gray-400 mt-0.5">Givelify settlement</p>
                       )}
                     </td>
                     <td className={`py-2 text-right font-medium ${txn.type === 'income' ? 'text-green-600' : 'text-red-600'} ${isCanceled ? 'line-through' : ''}`}>
