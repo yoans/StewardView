@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { fundsAPI } from '../services/api';
+import { fundsAPI, bankAPI } from '../services/api';
 import { formatDate } from '../utils/format';
+import FundsVsBankBanner from '../components/FundsVsBankBanner';
 
 const fmt = (n) => parseFloat(n || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
 export default function FundsPage({ user }) {
   const [funds, setFunds] = useState([]);
+  const [fundsVsBank, setFundsVsBank] = useState(null);
   const [selectedFund, setSelectedFund] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showTransfer, setShowTransfer] = useState(false);
@@ -23,6 +25,13 @@ export default function FundsPage({ user }) {
     setFunds(res.data);
   };
 
+  const loadRecon = async () => {
+    try {
+      const res = await bankAPI.balances();
+      setFundsVsBank(res.data.funds_vs_bank || null);
+    } catch { /* ignore */ }
+  };
+
   const loadRecurring = async () => {
     try {
       const res = await fundsAPI.recurringList();
@@ -30,7 +39,7 @@ export default function FundsPage({ user }) {
     } catch { /* table may not exist yet */ }
   };
 
-  useEffect(() => { loadFunds(); loadRecurring(); }, []);
+  useEffect(() => { loadFunds(); loadRecurring(); loadRecon(); }, []);
 
   const selectFund = async (id) => {
     const res = await fundsAPI.get(id);
@@ -44,6 +53,7 @@ export default function FundsPage({ user }) {
       setShowCreate(false);
       setForm({ name: '', description: '', target_amount: '', is_restricted: true });
       loadFunds();
+      loadRecon();
     } catch (err) { alert(err.response?.data?.error || 'Failed to create fund'); }
   };
 
@@ -58,6 +68,7 @@ export default function FundsPage({ user }) {
       setShowTransfer(false);
       setTransferForm({ to_fund_id: '', amount: '', description: '' });
       loadFunds();
+      loadRecon();
       selectFund(selectedFund.id);
     } catch (err) { alert(err.response?.data?.error || 'Transfer failed'); }
   };
@@ -73,6 +84,7 @@ export default function FundsPage({ user }) {
       setShowAdjust(false);
       setAdjustForm({ type: 'increase', amount: '', description: '' });
       loadFunds();
+      loadRecon();
       selectFund(selectedFund.id);
     } catch (err) { alert(err.response?.data?.error || 'Adjustment failed'); }
   };
@@ -117,6 +129,8 @@ export default function FundsPage({ user }) {
           )}
         </div>
       </div>
+
+      <FundsVsBankBanner recon={fundsVsBank} />
 
       {/* Create Fund Form */}
       {showCreate && (

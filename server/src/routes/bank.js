@@ -6,6 +6,7 @@ const { logAudit } = require('../models/auditLog');
 const multer = require('multer');
 const { parse } = require('csv-parse');
 const { v4: uuidv4 } = require('uuid');
+const { applyFundMovement, buildFundsBankReconciliation, resolveExpenseFundId } = require('../utils/fundBank');
 
 // Multer: memory storage, CSV only, 5 MB limit
 const upload = multer({
@@ -215,6 +216,19 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
         const checkNumber = String(getValue(row, ['check_number', 'check_no', 'check', 'check_#'])).trim() || null;
         const notes = String(getValue(row, ['notes', 'note'])).trim() || null;
 
+        // Debits (expenses) must hit a fund so spending shows against that fund.
+        // Bank income (e.g. Givelify deposit) does not credit a fund again.
+        let fundId = null;
+        if (type === 'expense') {
+          try {
+            fundId = await resolveExpenseFundId(req.tenantId, null);
+          } catch (e) {
+            errors.push(`Row ${i + 2}: ${e.message}`);
+            skipped++;
+            continue;
+          }
+        }
+
         const duplicate = await db('transactions')
           .where({
             tenant_id: req.tenantId,
@@ -231,19 +245,37 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
 
         if (duplicate) { skipped++; continue; }
 
-        await db('transactions').insert({
-          ref_number: `IMP-${uuidv4().slice(0, 8).toUpperCase()}`,
-          type,
-          amount,
-          date: parsedDate,
-          description,
-          payee_payer: payee,
-          check_number: checkNumber,
-          bank_account_id: account.id,
-          status: 'cleared',
-          notes,
-          created_by: req.user.id,
-          tenant_id: req.tenantId,
+        await db.transaction(async (trx) => {
+          const [{ id: txnId }] = await trx('transactions').insert({
+            ref_number: `IMP-${uuidv4().slice(0, 8).toUpperCase()}`,
+            type,
+            amount,
+            date: parsedDate,
+            description,
+            payee_payer: payee,
+            check_number: checkNumber,
+            bank_account_id: account.id,
+            fund_id: fundId,
+            status: 'cleared',
+            notes,
+            created_by: req.user.id,
+            tenant_id: req.tenantId,
+          }).returning('id');
+
+          if (fundId) {
+            await applyFundMovement({
+              fundId,
+              transactionId: txnId,
+              type,
+              amount,
+              date: parsedDate,
+              description,
+              payeePayer: payee,
+              userId: req.user.id,
+              tenantId: req.tenantId,
+              trx,
+            });
+          }
         });
 
         imported++;
@@ -301,11 +333,14 @@ router.get('/balances', authenticate, requireTenant, async (req, res) => {
     decorated.push(row);
   }
   const total = decorated.reduce((sum, a) => sum + parseFloat(a.calculated_balance || 0), 0);
+  const funds = await db('funds').where({ is_active: true, tenant_id: req.tenantId });
+  const funds_vs_bank = buildFundsBankReconciliation(funds, decorated);
   res.json({
     accounts: decorated,
     total_balance: total,
     balance_is_calculated: true,
     note: 'Balances are calculated from starting balance plus imported bank transactions. Compare to your bank statement when reconciling.',
+    funds_vs_bank,
   });
 });
 

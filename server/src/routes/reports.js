@@ -6,6 +6,7 @@ const { authenticate, authorize } = require('../middleware/auth');
 const { requireTenant } = require('../middleware/tenant');
 const { logAudit } = require('../models/auditLog');
 const { generateMonthlyReportPDF } = require('../reports/generateMonthlyReport');
+const { buildFundsBankReconciliation } = require('../utils/fundBank');
 
 const REPORT_DIR = process.env.REPORT_DIR || path.join(__dirname, '..', '..', 'reports');
 
@@ -149,6 +150,8 @@ router.get('/dashboard', authenticate, requireTenant, async (req, res) => {
 
     // Fund balances
     const funds = await db('funds').where({ is_active: true, tenant_id: req.tenantId });
+    const totalFunds = funds.reduce((s, f) => s + (parseFloat(f.current_balance) || 0), 0);
+    const funds_vs_bank = buildFundsBankReconciliation(funds, bankAccounts);
 
     // Recent transactions
     const recentTransactions = await db('transactions')
@@ -173,6 +176,8 @@ router.get('/dashboard', authenticate, requireTenant, async (req, res) => {
         net: (parseFloat(monthIncome.total) || 0) - (parseFloat(monthExpenses.total) || 0),
       },
       funds,
+      total_funds: Math.round(totalFunds * 100) / 100,
+      funds_vs_bank,
       recent_transactions: recentTransactions,
     });
   } catch (err) {

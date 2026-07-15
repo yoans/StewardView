@@ -4,6 +4,7 @@ const db = require('../models/db');
 const { authenticate, authorize } = require('../middleware/auth');
 const { requireTenant } = require('../middleware/tenant');
 const { logAudit } = require('../models/auditLog');
+const { getGeneralFund, applyFundMovement, reverseFundMovement, resolveExpenseFundId } = require('../utils/fundBank');
 
 // GET /api/transactions
 router.get('/', authenticate, requireTenant, async (req, res) => {
@@ -61,34 +62,43 @@ router.post('/', authenticate, requireTenant, authorize('admin', 'treasurer', 'f
     const { type, amount, date, description, payee_payer, check_number, category_id, bank_account_id, notes } = req.body;
     let { fund_id } = req.body;
 
-    // Auto-default income to General Fund if no fund specified
-    if (!fund_id && type === 'income') {
-      const generalFund = await db('funds').where({ name: 'General Fund', is_active: true, tenant_id: req.tenantId }).first();
+    if (type === 'expense') {
+      try {
+        fund_id = await resolveExpenseFundId(req.tenantId, fund_id || null);
+      } catch (e) {
+        return res.status(400).json({ error: e.message });
+      }
+    } else if (!fund_id && type === 'income') {
+      const generalFund = await getGeneralFund(req.tenantId);
       if (generalFund) fund_id = generalFund.id;
     }
 
     const ref_number = uuidv4();
-    const [{ id }] = await db('transactions').insert({
-      ref_number, type, amount, date, description, payee_payer,
-      check_number, category_id, bank_account_id, fund_id,
-      notes, status: 'cleared', created_by: req.user.id,
-      tenant_id: req.tenantId,
-    }).returning('id');
+    let id;
+    await db.transaction(async (trx) => {
+      const [row] = await trx('transactions').insert({
+        ref_number, type, amount, date, description, payee_payer,
+        check_number, category_id, bank_account_id, fund_id,
+        notes, status: 'cleared', created_by: req.user.id,
+        tenant_id: req.tenantId,
+      }).returning('id');
+      id = row.id;
 
-    // If directed to a fund, create fund transaction
-    if (fund_id) {
-      const fundType = type === 'income' ? 'contribution' : 'disbursement';
-      await db('fund_transactions').insert({
-        fund_id, transaction_id: id, type: fundType,
-        amount, date, description,
-        donor_name: payee_payer || null,
-        created_by: req.user.id,
-      });
-
-      // Update fund balance
-      const balanceChange = type === 'income' ? amount : -amount;
-      await db('funds').where({ id: fund_id }).increment('current_balance', balanceChange);
-    }
+      if (fund_id) {
+        await applyFundMovement({
+          fundId: fund_id,
+          transactionId: id,
+          type,
+          amount,
+          date,
+          description,
+          payeePayer: payee_payer,
+          userId: req.user.id,
+          tenantId: req.tenantId,
+          trx,
+        });
+      }
+    });
 
     await logAudit({
       entityType: 'transaction', entityId: id, action: 'create',
@@ -125,9 +135,57 @@ router.put('/:id', authenticate, requireTenant, authorize('admin', 'treasurer', 
       }
     }
 
+    const nextType = updates.type !== undefined ? updates.type : existing.type;
+    let nextFundId = updates.fund_id !== undefined ? updates.fund_id : existing.fund_id;
+    const nextAmount = updates.amount !== undefined ? updates.amount : existing.amount;
+    const nextStatus = updates.status !== undefined ? updates.status : existing.status;
+    const nextDate = updates.date !== undefined ? updates.date : existing.date;
+    const nextDescription = updates.description !== undefined ? updates.description : existing.description;
+    const nextPayee = updates.payee_payer !== undefined ? updates.payee_payer : existing.payee_payer;
+
+    if (nextType === 'expense' && nextStatus !== 'void') {
+      try {
+        nextFundId = await resolveExpenseFundId(req.tenantId, nextFundId || null);
+        updates.fund_id = nextFundId;
+      } catch (e) {
+        return res.status(400).json({ error: e.message });
+      }
+    }
+
     updates.updated_at = new Date().toISOString();
 
-    await db('transactions').where({ id: req.params.id }).update(updates);
+    await db.transaction(async (trx) => {
+      const wasActive = existing.status !== 'void';
+      const willBeActive = nextStatus !== 'void';
+
+      if (wasActive && existing.fund_id) {
+        await reverseFundMovement({
+          fundId: existing.fund_id,
+          type: existing.type,
+          amount: existing.amount,
+          tenantId: req.tenantId,
+          transactionId: existing.id,
+          trx,
+        });
+      }
+
+      await trx('transactions').where({ id: req.params.id }).update(updates);
+
+      if (willBeActive && nextFundId) {
+        await applyFundMovement({
+          fundId: nextFundId,
+          transactionId: existing.id,
+          type: nextType,
+          amount: nextAmount,
+          date: nextDate,
+          description: nextDescription,
+          payeePayer: nextPayee,
+          userId: req.user.id,
+          tenantId: req.tenantId,
+          trx,
+        });
+      }
+    });
 
     await logAudit({
       entityType: 'transaction', entityId: existing.id, action: 'update',
@@ -137,7 +195,11 @@ router.put('/:id', authenticate, requireTenant, authorize('admin', 'treasurer', 
       tenantId: req.tenantId || req.user?.tenant_id || null,
     });
 
-    const updated = await db('transactions').where({ id: req.params.id }).first();
+    const updated = await db('transactions')
+      .leftJoin('funds', 'transactions.fund_id', 'funds.id')
+      .select('transactions.*', 'funds.name as fund_name')
+      .where('transactions.id', req.params.id)
+      .first();
     res.json(updated);
   } catch (err) {
     console.error('Update transaction error:', err);
@@ -151,11 +213,23 @@ router.delete('/:id', authenticate, requireTenant, authorize('admin', 'treasurer
     const existing = await db('transactions').where({ id: req.params.id, tenant_id: req.tenantId }).first();
     if (!existing) return res.status(404).json({ error: 'Transaction not found' });
 
-    await db('transactions').where({ id: req.params.id }).update({ status: 'void', updated_at: new Date().toISOString() });
+    await db.transaction(async (trx) => {
+      if (existing.status !== 'void' && existing.fund_id) {
+        await reverseFundMovement({
+          fundId: existing.fund_id,
+          type: existing.type,
+          amount: existing.amount,
+          tenantId: req.tenantId,
+          transactionId: existing.id,
+          trx,
+        });
+      }
+      await trx('transactions').where({ id: req.params.id }).update({ status: 'void', updated_at: new Date().toISOString() });
+    });
 
     await logAudit({
       entityType: 'transaction', entityId: existing.id, action: 'void',
-      oldValues: { amount: existing.amount, date: existing.date, description: existing.description, status: existing.status },
+      oldValues: { amount: existing.amount, date: existing.date, description: existing.description, status: existing.status, fund_id: existing.fund_id },
       newValues: { status: 'void' },
       changeReason: req.body.change_reason || 'Transaction canceled',
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip,

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { bankAPI } from '../services/api';
+import FundsVsBankBanner from '../components/FundsVsBankBanner';
 
 const fmt = (n) => parseFloat(n || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
@@ -323,6 +324,8 @@ export default function BankPage({ user }) {
             </div>
           )}
 
+          <FundsVsBankBanner recon={balances?.funds_vs_bank} />
+
           {/* Add / Edit Form */}
           {canManage && (showAddManual || editingAccount) && (
             <div className="card mb-6 bg-gray-50 border border-gray-200">
@@ -433,8 +436,10 @@ export default function BankPage({ user }) {
             </p>
             <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
               <li>Givelify gifts update <strong>funds / budget income</strong>, not bank cash</li>
-              <li>When Givelify settles, the bank CSV shows a deposit — that row updates the bank balance</li>
+              <li>When Givelify settles, the bank CSV shows a deposit — that row updates the bank balance (not funds again)</li>
+              <li>Imported <strong>expenses</strong> draw from the <strong>General Fund</strong> by default so fund totals stay aligned with checking</li>
               <li>Leave bank Givelify deposits uncategorized (or use a non-budget category) so income is not double-counted</li>
+              <li>Sum of all fund balances should equal the checking book balance — flagged on Dashboard, Bank, and Funds</li>
             </ul>
           </div>
 

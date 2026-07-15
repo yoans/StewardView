@@ -11,12 +11,27 @@ export default function TransactionsPage({ user }) {
   const [showForm, setShowForm] = useState(false);
   const [filters, setFilters] = useState({ type: '', start_date: '', end_date: '' });
   const [form, setForm] = useState({
-    type: 'income', amount: '', date: new Date().toISOString().slice(0, 10),
+    type: 'expense', amount: '', date: new Date().toISOString().slice(0, 10),
     description: '', payee_payer: '', check_number: '', category_id: '',
     bank_account_id: 1, fund_id: '', notes: '',
   });
   const [loading, setLoading] = useState(true);
   const canEdit = ['admin', 'treasurer', 'finance_committee'].includes(user.role);
+
+  const generalFundId = funds.find(f => f.name === 'General Fund')?.id;
+
+  const emptyForm = () => ({
+    type: 'expense',
+    amount: '',
+    date: new Date().toISOString().slice(0, 10),
+    description: '',
+    payee_payer: '',
+    check_number: '',
+    category_id: '',
+    bank_account_id: 1,
+    fund_id: generalFundId ? String(generalFundId) : '',
+    notes: '',
+  });
 
   const loadData = async () => {
     setLoading(true);
@@ -29,6 +44,8 @@ export default function TransactionsPage({ user }) {
       setTransactions(txnRes.data);
       setCategories(catRes.data);
       setFunds(fundRes.data);
+      const gf = fundRes.data.find(f => f.name === 'General Fund');
+      setForm(prev => (prev.fund_id || !gf ? prev : { ...prev, fund_id: String(gf.id) }));
     } catch (err) { console.error(err); }
     setLoading(false);
   };
@@ -47,7 +64,7 @@ export default function TransactionsPage({ user }) {
         fund_id: form.fund_id ? parseInt(form.fund_id) : null,
       });
       setShowForm(false);
-      setForm({ type: 'income', amount: '', date: new Date().toISOString().slice(0, 10), description: '', payee_payer: '', check_number: '', category_id: '', bank_account_id: 1, fund_id: '', notes: '' });
+      setForm(emptyForm());
       loadData();
     } catch (err) {
       alert(err.response?.data?.error || 'Failed to create transaction');
@@ -62,6 +79,19 @@ export default function TransactionsPage({ user }) {
       loadData();
     } catch (err) {
       alert(err.response?.data?.error || 'Failed to cancel transaction');
+    }
+  };
+
+  const handleFundChange = async (txn, fundId) => {
+    if (!fundId || String(fundId) === String(txn.fund_id || '')) return;
+    try {
+      await transactionsAPI.update(txn.id, {
+        fund_id: parseInt(fundId, 10),
+        change_reason: 'Assigned spending to fund',
+      });
+      loadData();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to update fund');
     }
   };
 
@@ -84,7 +114,17 @@ export default function TransactionsPage({ user }) {
           <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className="label">Type</label>
-              <select className="input" value={form.type} onChange={e => setForm({...form, type: e.target.value, category_id: ''})}>
+              <select className="input" value={form.type} onChange={e => {
+                const type = e.target.value;
+                setForm({
+                  ...form,
+                  type,
+                  category_id: '',
+                  fund_id: type === 'expense' && !form.fund_id && generalFundId
+                    ? String(generalFundId)
+                    : form.fund_id,
+                });
+              }}>
                 <option value="income">Income</option>
                 <option value="expense">Expense</option>
               </select>
@@ -113,11 +153,21 @@ export default function TransactionsPage({ user }) {
               </select>
             </div>
             <div>
-              <label className="label">Direct to Fund (Earmark)</label>
-              <select className="input" value={form.fund_id} onChange={e => setForm({...form, fund_id: e.target.value})}>
-                <option value="">— General —</option>
+              <label className="label">Fund {form.type === 'expense' ? '*' : ''}</label>
+              <select
+                className="input"
+                value={form.fund_id}
+                onChange={e => setForm({...form, fund_id: e.target.value})}
+                required={form.type === 'expense'}
+              >
+                {form.type !== 'expense' && <option value="">— Default (General Fund) —</option>}
                 {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
               </select>
+              <p className="text-xs text-gray-500 mt-1">
+                {form.type === 'expense'
+                  ? 'Debits reduce the selected fund (General Fund unless you pick another).'
+                  : 'Income credits a fund when selected; Givelify gifts already update funds on import.'}
+              </p>
             </div>
             <div>
               <label className="label">Check #</label>
@@ -186,7 +236,20 @@ export default function TransactionsPage({ user }) {
                     </td>
                     <td className="py-2 text-gray-600">{txn.payee_payer || '—'}</td>
                     <td className="py-2 text-gray-600">{txn.category_name || '—'}</td>
-                    <td className="py-2 text-gray-600">{txn.fund_name || '—'}</td>
+                    <td className="py-2 text-gray-600">
+                      {canEdit && !isCanceled && txn.type === 'expense' ? (
+                        <select
+                          className="input py-1 text-sm min-w-[9rem]"
+                          value={txn.fund_id || generalFundId || ''}
+                          onChange={(e) => handleFundChange(txn, e.target.value)}
+                          title="Fund this debit spends from"
+                        >
+                          {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                        </select>
+                      ) : (
+                        txn.fund_name || '—'
+                      )}
+                    </td>
                     <td className={`py-2 text-right font-medium ${txn.type === 'income' ? 'text-green-600' : 'text-red-600'} ${isCanceled ? 'line-through' : ''}`}>
                       {txn.type === 'income' ? '+' : '-'}{fmt(txn.amount)}
                     </td>

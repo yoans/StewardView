@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { reportsAPI } from '../services/api';
 import { formatDate } from '../utils/format';
+import FundsVsBankBanner from '../components/FundsVsBankBanner';
 
 const fmt = (n) => parseFloat(n || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
@@ -98,9 +99,12 @@ export default function DashboardPage({ tenant }) {
           </p>
           <p className="mt-2 text-amber-800">
             Givelify gifts update funds and income; cash hits the bank as a separate Givelify deposit on your CSV.
+            Expenses draw from the General Fund by default so fund totals stay aligned with checking.
           </p>
         </div>
       )}
+
+      <FundsVsBankBanner recon={data.funds_vs_bank} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         {/* Bank Accounts */}
@@ -130,7 +134,12 @@ export default function DashboardPage({ tenant }) {
 
         {/* Earmarked Funds */}
         <div className="card">
-          <h3 className="text-lg font-bold text-gray-900 mb-4">📌 Earmarked Funds</h3>
+          <div className="flex justify-between items-baseline mb-4">
+            <h3 className="text-lg font-bold text-gray-900">📌 Funds</h3>
+            {data.total_funds != null && (
+              <p className="text-sm text-gray-600">Total {fmt(data.total_funds)}</p>
+            )}
+          </div>
           <div className="space-y-3">
             {data.funds.map(fund => (
               <div key={fund.id} className="p-3 bg-gray-50 rounded-lg">
