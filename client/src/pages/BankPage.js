@@ -49,8 +49,20 @@ function CsvImportPanel({ accounts, onImported }) {
           </p>
           {error && <p className="text-red-600 text-sm mb-2">{error}</p>}
           {result && (
-            <div className="bg-green-50 border border-green-200 rounded p-3 text-sm text-green-800 mb-3">
-              <strong>Import complete:</strong> {result.imported} imported, {result.skipped} skipped.
+            <div className="bg-green-50 border border-green-200 rounded p-3 text-sm text-green-800 mb-3 space-y-1">
+              <p>
+                <strong>Import complete:</strong> {result.imported} imported, {result.skipped} skipped
+                {result.skipped_balance_rows ? ` (${result.skipped_balance_rows} balance/summary rows)` : ''}.
+              </p>
+              {result.calculated_balance != null && (
+                <p className="text-xs text-green-900 font-mono">
+                  {fmt(result.opening_balance)} starting + {fmt(result.income_total)} deposits − {fmt(result.expense_total)} withdrawals = <strong>{fmt(result.calculated_balance)}</strong> book
+                </p>
+              )}
+              {result.tip && <p className="text-xs text-amber-800 mt-1">{result.tip}</p>}
+              {result.csv_headers?.length > 0 && (
+                <p className="text-xs text-gray-600">CSV columns: {result.csv_headers.join(', ')}</p>
+              )}
               {result.errors?.length > 0 && (
                 <ul className="mt-1 list-disc list-inside text-xs text-red-700">
                   {result.errors.map((e, i) => <li key={i}>{e}</li>)}
@@ -210,6 +222,11 @@ function AccountCard({ acc, canManage, onEdit, onDeactivate }) {
           <span className="text-gray-500">Starting balance</span>
           <span className="text-gray-700">{fmt(acc.opening_balance)}</span>
         </div>
+        {(acc.transaction_income_total != null || acc.transaction_expense_total != null) && (
+          <p className="text-xs text-gray-500 font-mono">
+            {fmt(acc.opening_balance)} + {fmt(acc.transaction_income_total)} − {fmt(acc.transaction_expense_total)}
+          </p>
+        )}
         {acc.opening_balance_date && (
           <p className="text-xs text-gray-400">Starting as of {String(acc.opening_balance_date).slice(0, 10)}</p>
         )}

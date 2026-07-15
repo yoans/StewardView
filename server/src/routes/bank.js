@@ -31,15 +31,39 @@ function getValue(row, keys) {
 function parseMoney(value) {
   const text = String(value || '').trim();
   if (!text) return null;
-  const isNegative = /^\(.+\)$/.test(text) || text.includes('-');
-  const numeric = parseFloat(text.replace(/[$,()\s]/g, '').replace('-', ''));
+  // Do not use includes('-') — that flags dates and other non-amount text.
+  const isNegative =
+    /^\(.+\)$/.test(text) ||
+    /^-/.test(text) ||
+    /-$/.test(text) ||
+    /\bDR\b/i.test(text) ||
+    /\bDEB(IT)?\b/i.test(text);
+  const forcePositive = /\bCR\b/i.test(text) || /\bCRED(IT)?\b/i.test(text);
+  const numeric = parseFloat(
+    text
+      .replace(/[$,()\s]/g, '')
+      .replace(/^-/, '')
+      .replace(/-$/, '')
+      .replace(/\b(CR|DR|CREDIT|DEBIT)\b/gi, '')
+  );
   if (Number.isNaN(numeric)) return null;
-  return isNegative ? -numeric : numeric;
+  if (forcePositive) return Math.abs(numeric);
+  return isNegative ? -Math.abs(numeric) : numeric;
 }
 
 function normalizeDate(value) {
   const text = String(value || '').trim();
-  const dateParts = text.match(/^(\d{1,4})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if (!text) return null;
+
+  // ISO / datetime: 2026-03-01 or 2026-03-01T14:22:08Z
+  const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) {
+    const normalized = `${iso[1]}-${iso[2]}-${iso[3]}`;
+    const parsed = new Date(`${normalized}T00:00:00Z`);
+    return Number.isNaN(parsed.getTime()) ? null : normalized;
+  }
+
+  const dateParts = text.match(/^(\d{1,4})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
   if (!dateParts) return null;
 
   const [, first, second, third] = dateParts;
@@ -63,6 +87,15 @@ function isJunkDescription(text) {
   return false;
 }
 
+/** Skip summary / balance-forward rows that are not real movements. */
+function isNonTransactionRow(row, description) {
+  const hay = [
+    description,
+    getValue(row, ['name', 'payee', 'memo', 'notes', 'note', 'transaction', 'type']),
+  ].join(' ').toLowerCase();
+  return /beginning balance|balance forward|opening balance|ending balance|closing balance|starting balance|\btotals?\b|daily balance/.test(hay);
+}
+
 /** US Bank CSVs often put the real payee in Name and junk in Description. */
 function resolveDescription(row) {
   const candidates = [
@@ -78,10 +111,59 @@ function resolveDescription(row) {
 }
 
 function resolvePayee(row, description) {
-  const payee = String(getValue(row, ['payee', 'payee_payer', 'merchant', 'merchant_name']) || '').trim();
+  const payee = String(
+    getValue(row, ['name', 'payee', 'payee_payer', 'merchant', 'merchant_name']) || ''
+  ).trim();
   if (payee && !isJunkDescription(payee)) return payee.slice(0, 255);
   if (description && description !== 'Imported transaction') return description.slice(0, 255);
   return null;
+}
+
+/**
+ * Resolve signed cash movement for one CSV row.
+ * US Bank: Date, Transaction (CREDIT | DEBIT | check#), Name, Memo, Amount (signed).
+ * Amount already includes sign — do not invert again from Credit/Debit.
+ * Prefer Credit/Debit when present; for check numbers fall back to amount sign.
+ */
+function resolveCashMovement(row) {
+  const debit = parseMoney(getValue(row, ['debit', 'withdrawal', 'withdrawals']));
+  const credit = parseMoney(getValue(row, ['credit', 'deposit', 'deposits']));
+  let rawAmount = parseMoney(getValue(row, ['amount', 'transaction_amount']));
+
+  if (rawAmount === null) {
+    if (debit != null && credit != null && Math.abs(debit) > 0 && Math.abs(credit) > 0) {
+      return { error: 'row has both debit and credit amounts' };
+    }
+    if (debit != null && Math.abs(debit) > 0) rawAmount = -Math.abs(debit);
+    else if (credit != null && Math.abs(credit) > 0) rawAmount = Math.abs(credit);
+  }
+
+  if (rawAmount === null || rawAmount === 0) return { skip: true };
+
+  const amount = Math.abs(rawAmount);
+  const txnCol = String(getValue(row, ['transaction', 'transaction_type', 'dr_cr', 'credit_debit']) || '')
+    .toLowerCase()
+    .trim();
+  const nameCol = String(getValue(row, ['name', 'payee']) || '').toLowerCase().trim();
+
+  let type = String(row.type || '').toLowerCase().trim();
+  let checkNumber = null;
+
+  // US Bank puts check number in the Transaction column (e.g. "1102") with Name "CHECK"
+  if (/^\d{1,10}$/.test(txnCol)) {
+    checkNumber = txnCol;
+    type = rawAmount < 0 ? 'expense' : 'income';
+  } else if (type !== 'income' && type !== 'expense') {
+    if (txnCol === 'credit' || txnCol === 'deposit' || txnCol === 'cr') type = 'income';
+    else if (txnCol === 'debit' || txnCol === 'withdrawal' || txnCol === 'withdrawals' || txnCol === 'dr') type = 'expense';
+    else if (nameCol === 'check' || nameCol.startsWith('check ')) {
+      type = rawAmount < 0 ? 'expense' : 'income';
+    } else if (debit != null && Math.abs(debit) > 0 && !(credit != null && Math.abs(credit) > 0)) type = 'expense';
+    else if (credit != null && Math.abs(credit) > 0 && !(debit != null && Math.abs(debit) > 0)) type = 'income';
+    else type = rawAmount < 0 ? 'expense' : 'income';
+  }
+
+  return { amount, type, rawAmount, checkNumberFromTxn: checkNumber };
 }
 
 async function sumBankMovements(tenantId, bankAccountId) {
@@ -181,7 +263,11 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
 
     let imported = 0;
     let skipped = 0;
+    let skippedBalanceRows = 0;
+    let incomeImported = 0;
+    let expenseImported = 0;
     const errors = [];
+    const headers = records[0] ? Object.keys(records[0]) : [];
 
     for (const [i, row] of records.entries()) {
       try {
@@ -189,31 +275,27 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
         const parsedDate = normalizeDate(dateValue);
         if (!parsedDate) { errors.push(`Row ${i + 2}: invalid date "${dateValue || 'blank'}"`); skipped++; continue; }
 
-        const debit = parseMoney(getValue(row, ['debit', 'withdrawal', 'withdrawals', 'payment', 'payments']));
-        const credit = parseMoney(getValue(row, ['credit', 'deposit', 'deposits']));
-        let rawAmount = parseMoney(getValue(row, ['amount', 'transaction_amount']));
-
-        if (rawAmount === null) {
-          if (debit !== null) rawAmount = -Math.abs(debit);
-          if (credit !== null) rawAmount = Math.abs(credit);
-        }
-        if (rawAmount === null || rawAmount === 0) { skipped++; continue; }
-
-        const amount = Math.abs(rawAmount);
-
-        // Determine type from explicit column or sign of amount
-        // US Bank "Transaction" column is often Credit/Debit — not a description
-        let type = (row.type || '').toLowerCase().trim();
-        const txnCol = String(getValue(row, ['transaction']) || '').toLowerCase().trim();
-        if (type !== 'income' && type !== 'expense') {
-          if (txnCol === 'credit' || txnCol === 'deposit') type = 'income';
-          else if (txnCol === 'debit' || txnCol === 'withdrawal' || txnCol === 'withdrawals') type = 'expense';
-          else type = rawAmount < 0 ? 'expense' : 'income';
-        }
-
         const description = resolveDescription(row);
+        if (isNonTransactionRow(row, description)) {
+          skippedBalanceRows++;
+          skipped++;
+          continue;
+        }
+
+        const movement = resolveCashMovement(row);
+        if (movement.error) {
+          errors.push(`Row ${i + 2}: ${movement.error}`);
+          skipped++;
+          continue;
+        }
+        if (movement.skip) { skipped++; continue; }
+
+        const { amount, type } = movement;
         const payee = resolvePayee(row, description);
-        const checkNumber = String(getValue(row, ['check_number', 'check_no', 'check', 'check_#'])).trim() || null;
+        const checkNumber =
+          movement.checkNumberFromTxn ||
+          String(getValue(row, ['check_number', 'check_no', 'check', 'check_#'])).trim() ||
+          null;
         const notes = String(getValue(row, ['notes', 'note'])).trim() || null;
 
         // Debits (expenses) must hit a fund so spending shows against that fund.
@@ -279,6 +361,8 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
         });
 
         imported++;
+        if (type === 'income') incomeImported += amount;
+        else expenseImported += amount;
       } catch (rowErr) {
         errors.push(`Row ${i + 2}: ${rowErr.message}`);
         skipped++;
@@ -299,9 +383,14 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
         bank_account_name: account.name,
         imported,
         skipped,
+        skipped_balance_rows: skippedBalanceRows,
+        income_imported: Math.round(incomeImported * 100) / 100,
+        expense_imported: Math.round(expenseImported * 100) / 100,
         error_count: errors.length,
         errors: errors.slice(0, 10),
         calculated_balance: decorated.calculated_balance,
+        opening_balance: decorated.opening_balance,
+        csv_headers: headers,
       },
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip, tenantId: req.tenantId,
     });
@@ -310,8 +399,17 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
       message: `Import complete`,
       imported,
       skipped,
+      skipped_balance_rows: skippedBalanceRows,
       errors: errors.slice(0, 20),
+      csv_headers: headers,
+      opening_balance: decorated.opening_balance,
+      income_total: decorated.transaction_income_total,
+      expense_total: decorated.transaction_expense_total,
       calculated_balance: decorated.calculated_balance,
+      formula: 'starting balance + deposits − withdrawals',
+      tip: decorated.opening_balance === 0
+        ? 'Starting balance is $0. Set it to your checking balance the day before the first imported transaction, or calculated book balance will only equal the bank if the CSV includes every movement from a $0 start.'
+        : 'Compare calculated book balance to your bank. If off, check for overlapping CSV date ranges or a wrong starting balance.',
     });
   } catch (err) {
     if (err.message === 'Only CSV files are accepted') return res.status(400).json({ error: err.message });
