@@ -53,6 +53,78 @@ function normalizeDate(value) {
   return Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== normalized ? null : normalized;
 }
 
+function isJunkDescription(text) {
+  const t = String(text || '').trim().toLowerCase();
+  if (!t) return true;
+  if (t.includes('download from usbank')) return true;
+  if (t === 'usbank.com' || t === 'us bank' || t === 'u.s. bank') return true;
+  if (/^https?:\/\//.test(t)) return true;
+  return false;
+}
+
+/** US Bank CSVs often put the real payee in Name and junk in Description. */
+function resolveDescription(row) {
+  const candidates = [
+    getValue(row, ['name', 'payee', 'payee_payer', 'merchant', 'merchant_name', 'payee_name']),
+    getValue(row, ['description', 'transaction_description', 'details', 'narrative']),
+    getValue(row, ['memo', 'notes', 'note', 'remark']),
+  ];
+  for (const c of candidates) {
+    const text = String(c || '').trim();
+    if (text && !isJunkDescription(text)) return text.slice(0, 255);
+  }
+  return 'Imported transaction';
+}
+
+function resolvePayee(row, description) {
+  const payee = String(getValue(row, ['payee', 'payee_payer', 'merchant', 'merchant_name']) || '').trim();
+  if (payee && !isJunkDescription(payee)) return payee.slice(0, 255);
+  if (description && description !== 'Imported transaction') return description.slice(0, 255);
+  return null;
+}
+
+async function sumBankMovements(tenantId, bankAccountId) {
+  const income = await db('transactions')
+    .where({ tenant_id: tenantId, bank_account_id: bankAccountId, type: 'income' })
+    .where('status', '!=', 'void')
+    .sum('amount as total')
+    .first();
+  const expense = await db('transactions')
+    .where({ tenant_id: tenantId, bank_account_id: bankAccountId, type: 'expense' })
+    .where('status', '!=', 'void')
+    .sum('amount as total')
+    .first();
+  return {
+    income: parseFloat(income?.total) || 0,
+    expense: parseFloat(expense?.total) || 0,
+  };
+}
+
+async function decorateAccount(account, tenantId) {
+  const opening = parseFloat(account.opening_balance != null ? account.opening_balance : account.current_balance) || 0;
+  const { income, expense } = await sumBankMovements(tenantId, account.id);
+  const calculated_balance = Math.round((opening + income - expense) * 100) / 100;
+  return {
+    ...account,
+    opening_balance: opening,
+    calculated_balance,
+    transaction_income_total: income,
+    transaction_expense_total: expense,
+    // Keep current_balance aligned to calculated book balance for older UI
+    current_balance: calculated_balance,
+    available_balance: calculated_balance,
+    balance_is_calculated: true,
+  };
+}
+
+async function syncStoredBalance(accountId, tenantId, calculated) {
+  await db('bank_accounts').where({ id: accountId, tenant_id: tenantId }).update({
+    current_balance: calculated,
+    available_balance: calculated,
+    balance_last_updated: new Date().toISOString(),
+  });
+}
+
 function uploadCsv(req, res, next) {
   upload.single('file')(req, res, (err) => {
     if (!err) return next();
@@ -66,7 +138,13 @@ function uploadCsv(req, res, next) {
 // GET /api/bank/accounts — list all bank accounts
 router.get('/accounts', authenticate, requireTenant, async (req, res) => {
   const accounts = await db('bank_accounts').where({ is_active: true, tenant_id: req.tenantId });
-  res.json(accounts);
+  const decorated = [];
+  for (const acc of accounts) {
+    const row = await decorateAccount(acc, req.tenantId);
+    await syncStoredBalance(acc.id, req.tenantId, row.calculated_balance);
+    decorated.push(row);
+  }
+  res.json(decorated);
 });
 
 // POST /api/bank/import — import transactions from a CSV file into a bank account
@@ -123,15 +201,19 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
         const amount = Math.abs(rawAmount);
 
         // Determine type from explicit column or sign of amount
+        // US Bank "Transaction" column is often Credit/Debit — not a description
         let type = (row.type || '').toLowerCase().trim();
+        const txnCol = String(getValue(row, ['transaction']) || '').toLowerCase().trim();
         if (type !== 'income' && type !== 'expense') {
-          type = rawAmount < 0 ? 'expense' : 'income';
+          if (txnCol === 'credit' || txnCol === 'deposit') type = 'income';
+          else if (txnCol === 'debit' || txnCol === 'withdrawal' || txnCol === 'withdrawals') type = 'expense';
+          else type = rawAmount < 0 ? 'expense' : 'income';
         }
 
-        const description = String(getValue(row, ['description', 'memo', 'details', 'name', 'transaction_description']) || 'Imported transaction').trim().slice(0, 255);
-        const payee = String(getValue(row, ['payee', 'payee_payer', 'name'])).trim().slice(0, 255) || null;
+        const description = resolveDescription(row);
+        const payee = resolvePayee(row, description);
         const checkNumber = String(getValue(row, ['check_number', 'check_no', 'check', 'check_#'])).trim() || null;
-        const notes = String(getValue(row, ['notes', 'note', 'memo'])).trim() || null;
+        const notes = String(getValue(row, ['notes', 'note'])).trim() || null;
 
         const duplicate = await db('transactions')
           .where({
@@ -171,6 +253,12 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
       }
     }
 
+    const decorated = await decorateAccount(
+      await db('bank_accounts').where({ id: account.id }).first(),
+      req.tenantId
+    );
+    await syncStoredBalance(account.id, req.tenantId, decorated.calculated_balance);
+
     await logAudit({
       entityType: 'bank_import', entityId: account.id, action: 'import',
       newValues: {
@@ -181,11 +269,18 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
         skipped,
         error_count: errors.length,
         errors: errors.slice(0, 10),
+        calculated_balance: decorated.calculated_balance,
       },
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip, tenantId: req.tenantId,
     });
 
-    res.json({ message: `Import complete`, imported, skipped, errors: errors.slice(0, 20) });
+    res.json({
+      message: `Import complete`,
+      imported,
+      skipped,
+      errors: errors.slice(0, 20),
+      calculated_balance: decorated.calculated_balance,
+    });
   } catch (err) {
     if (err.message === 'Only CSV files are accepted') return res.status(400).json({ error: err.message });
     console.error('CSV import error:', err);
@@ -197,24 +292,39 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
 router.get('/balances', authenticate, requireTenant, async (req, res) => {
   const accounts = await db('bank_accounts')
     .where({ is_active: true, tenant_id: req.tenantId })
-    .select('id', 'name', 'institution', 'account_mask', 'account_type', 'current_balance', 'available_balance', 'balance_last_updated');
+    .select('*');
 
-  const total = accounts.reduce((sum, a) => sum + parseFloat(a.current_balance || 0), 0);
-  res.json({ accounts, total_balance: total });
+  const decorated = [];
+  for (const acc of accounts) {
+    const row = await decorateAccount(acc, req.tenantId);
+    await syncStoredBalance(acc.id, req.tenantId, row.calculated_balance);
+    decorated.push(row);
+  }
+  const total = decorated.reduce((sum, a) => sum + parseFloat(a.calculated_balance || 0), 0);
+  res.json({
+    accounts: decorated,
+    total_balance: total,
+    balance_is_calculated: true,
+    note: 'Balances are calculated from starting balance plus imported bank transactions. Compare to your bank statement when reconciling.',
+  });
 });
 
 // POST /api/bank/accounts — create a bank account
 router.post('/accounts', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
   try {
-    const { name, institution, account_mask, current_balance, available_balance, account_type } = req.body;
+    const { name, institution, account_mask, current_balance, available_balance, account_type, opening_balance, opening_balance_date } = req.body;
     if (!name || !institution) return res.status(400).json({ error: 'name and institution are required' });
+
+    const opening = parseFloat(opening_balance != null ? opening_balance : current_balance) || 0;
 
     const [{ id }] = await db('bank_accounts').insert({
       name,
       institution,
       account_mask: account_mask || null,
-      current_balance: parseFloat(current_balance) || 0,
-      available_balance: parseFloat(available_balance || current_balance) || 0,
+      opening_balance: opening,
+      opening_balance_date: opening_balance_date || `${new Date().getFullYear()}-01-01`,
+      current_balance: opening,
+      available_balance: parseFloat(available_balance != null ? available_balance : opening) || opening,
       account_type: account_type || 'checking',
       balance_last_updated: new Date().toISOString(),
       tenant_id: req.tenantId,
@@ -222,7 +332,7 @@ router.post('/accounts', authenticate, requireTenant, authorize('admin', 'treasu
 
     await logAudit({
       entityType: 'bank_account', entityId: id, action: 'create',
-      newValues: { name, institution },
+      newValues: { name, institution, opening_balance: opening, opening_balance_date: opening_balance_date || null },
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
       tenantId: req.tenantId || req.user?.tenant_id || null,
     });
@@ -234,33 +344,39 @@ router.post('/accounts', authenticate, requireTenant, authorize('admin', 'treasu
   }
 });
 
-// PUT /api/bank/accounts/:id — update a bank account (name, institution, or manual balance)
+// PUT /api/bank/accounts/:id — update a bank account (name, institution, opening balance)
 router.put('/accounts/:id', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
   try {
     const account = await db('bank_accounts').where({ id: req.params.id, is_active: true, tenant_id: req.tenantId }).first();
     if (!account) return res.status(404).json({ error: 'Account not found' });
 
-    const { name, institution, account_mask, current_balance, available_balance } = req.body;
+    const { name, institution, account_mask, opening_balance, opening_balance_date, current_balance, available_balance } = req.body;
     const updates = {};
     if (name !== undefined) updates.name = name;
     if (institution !== undefined) updates.institution = institution;
     if (account_mask !== undefined) updates.account_mask = account_mask;
-    if (current_balance !== undefined) {
-      updates.current_balance = parseFloat(current_balance);
-      updates.balance_last_updated = new Date().toISOString();
+    if (opening_balance !== undefined) updates.opening_balance = parseFloat(opening_balance) || 0;
+    if (opening_balance_date !== undefined) updates.opening_balance_date = opening_balance_date || null;
+    // Legacy: editing "current_balance" from older UI sets opening balance (starting point)
+    if (current_balance !== undefined && opening_balance === undefined) {
+      updates.opening_balance = parseFloat(current_balance) || 0;
     }
     if (available_balance !== undefined) updates.available_balance = parseFloat(available_balance);
 
     await db('bank_accounts').where({ id: req.params.id }).update(updates);
 
+    const refreshed = await db('bank_accounts').where({ id: req.params.id }).first();
+    const decorated = await decorateAccount(refreshed, req.tenantId);
+    await syncStoredBalance(account.id, req.tenantId, decorated.calculated_balance);
+
     await logAudit({
       entityType: 'bank_account', entityId: req.params.id, action: 'update',
-      oldValues: account, newValues: updates,
+      oldValues: account, newValues: { ...updates, calculated_balance: decorated.calculated_balance },
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
       tenantId: req.tenantId || req.user?.tenant_id || null,
     });
 
-    res.json({ message: 'Account updated' });
+    res.json({ message: 'Account updated', account: decorated });
   } catch (err) {
     console.error('Update account error:', err);
     res.status(500).json({ error: 'Failed to update account' });

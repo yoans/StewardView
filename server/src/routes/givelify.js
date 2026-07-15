@@ -195,17 +195,6 @@ async function mapEnvelopeToFund(envelope, tenantId) {
   return findFundByName(envelope, tenantId);
 }
 
-async function getDefaultBankAccountId(tenantId) {
-  const checking = await db('bank_accounts')
-    .where({ is_active: true, tenant_id: tenantId })
-    .andWhere((q) => q.where('account_type', 'checking').orWhereNull('account_type'))
-    .orderBy('id')
-    .first();
-  if (checking) return checking.id;
-  const any = await db('bank_accounts').where({ is_active: true, tenant_id: tenantId }).orderBy('id').first();
-  return any ? any.id : null;
-}
-
 async function resolveIncomeCategoryId(fund, tenantId, trx = db) {
   const preferred = fund.name === 'General Fund' || !fund.is_restricted
     ? 'Tithes & Offerings'
@@ -273,7 +262,7 @@ async function scrubExistingDonorPii(tenantId) {
     .update({ donor_name: null });
 }
 
-async function createEarmarkRecords({ gc, fund, amount, date, userId, tenantId, bankAccountId, trx, notePrefix = 'Imported from Givelify' }) {
+async function createEarmarkRecords({ gc, fund, amount, date, userId, tenantId, trx, notePrefix = 'Imported from Givelify' }) {
   const ref_number = uuidv4();
   const categoryId = await resolveIncomeCategoryId(fund, tenantId, trx);
   const envelope = gc.envelope || 'General';
@@ -286,7 +275,7 @@ async function createEarmarkRecords({ gc, fund, amount, date, userId, tenantId, 
     description: `Givelify - ${envelope}`,
     payee_payer: 'Givelify',
     category_id: categoryId,
-    bank_account_id: bankAccountId,
+    bank_account_id: null, // Givelify gifts drive funds; cash hits the bank as a separate deposit
     fund_id: fund.id,
     status: 'cleared',
     notes: `${notePrefix}. ID: ${gc.givelify_id || 'N/A'}`,
@@ -406,7 +395,6 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
     }
 
     const results = { imported: 0, skipped: 0, auto_earmarked: 0, pending: 0, errors: [], scrubbed_existing_pii: true };
-    const bankAccountId = await getDefaultBankAccountId(req.tenantId);
     const seenIds = new Set();
 
     // Refresh anonymity for any previously imported donor details (no seed / demo data)
@@ -478,7 +466,6 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
               date: c.date,
               userId: req.user.id,
               tenantId: req.tenantId,
-              bankAccountId,
               trx,
               notePrefix: 'Auto-imported from Givelify',
             });
@@ -526,7 +513,6 @@ router.post('/:id/earmark', authenticate, requireTenant, authorize('admin', 'tre
     const fund = await db('funds').where({ id: fund_id, tenant_id: req.tenantId, is_active: true }).first();
     if (!fund) return res.status(404).json({ error: 'Fund not found' });
 
-    const bankAccountId = await getDefaultBankAccountId(req.tenantId);
     const amount = parseFloat(gc.amount);
 
     let txnId;
@@ -538,7 +524,6 @@ router.post('/:id/earmark', authenticate, requireTenant, authorize('admin', 'tre
         date: gc.date,
         userId: req.user.id,
         tenantId: req.tenantId,
-        bankAccountId,
         trx,
         notePrefix: 'Manually earmarked from Givelify',
       });

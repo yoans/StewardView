@@ -64,7 +64,7 @@ export default function DashboardPage({ tenant }) {
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <SummaryCard
-          title="Total Bank Balance"
+          title="Book Bank Balance"
           value={fmt(data.bank.total_balance)}
           color="blue"
           icon="🏦"
@@ -89,6 +89,19 @@ export default function DashboardPage({ tenant }) {
         />
       </div>
 
+      {(data.bank.note || data.bank.balance_is_calculated) && (
+        <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p className="font-medium mb-1">Calculated book balance — reconcile manually</p>
+          <p>
+            {data.bank.note ||
+              'Bank totals are calculated from each account’s starting balance plus imported bank transactions. Compare to your bank statement when reconciling — StewardView is not a live bank feed.'}
+          </p>
+          <p className="mt-2 text-amber-800">
+            Givelify gifts update funds and income; cash hits the bank as a separate Givelify deposit on your CSV.
+          </p>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         {/* Bank Accounts */}
         <div className="card">
@@ -98,13 +111,17 @@ export default function DashboardPage({ tenant }) {
               <div key={acc.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                 <div>
                   <p className="font-medium text-gray-900">{acc.name}</p>
-                  <p className="text-xs text-gray-500">{acc.institution} ••••{acc.account_mask}</p>
+                  <p className="text-xs text-gray-500">{acc.institution}{acc.account_mask ? ` ••••${acc.account_mask}` : ''}</p>
+                  {acc.opening_balance != null && (
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      Starting {fmt(acc.opening_balance)}
+                      {acc.opening_balance_date ? ` as of ${String(acc.opening_balance_date).slice(0, 10)}` : ''}
+                    </p>
+                  )}
                 </div>
                 <div className="text-right">
-                  <p className="font-bold text-blue-700">{fmt(acc.current_balance)}</p>
-                  {acc.balance_last_updated && (
-                    <p className="text-xs text-gray-400">Updated: {new Date(acc.balance_last_updated).toLocaleDateString()}</p>
-                  )}
+                  <p className="font-bold text-blue-700">{fmt(acc.calculated_balance ?? acc.current_balance)}</p>
+                  <p className="text-xs text-gray-400">calculated</p>
                 </div>
               </div>
             ))}

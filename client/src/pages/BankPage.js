@@ -107,7 +107,14 @@ function ManualAccountForm({ onSave, onCancel, initial }) {
   const [name, setName] = useState(initial?.name || '');
   const [institution, setInstitution] = useState(initial?.institution || '');
   const [mask, setMask] = useState(initial?.account_mask || '');
-  const [balance, setBalance] = useState(initial?.current_balance || '');
+  const [opening, setOpening] = useState(
+    initial?.opening_balance != null ? initial.opening_balance : (initial?.current_balance ?? '')
+  );
+  const [openingDate, setOpeningDate] = useState(
+    initial?.opening_balance_date
+      ? String(initial.opening_balance_date).slice(0, 10)
+      : `${new Date().getFullYear()}-01-01`
+  );
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
 
@@ -117,10 +124,17 @@ function ManualAccountForm({ onSave, onCancel, initial }) {
     setSaving(true);
     setErr('');
     try {
+      const payload = {
+        name,
+        institution,
+        account_mask: mask,
+        opening_balance: parseFloat(opening) || 0,
+        opening_balance_date: openingDate || null,
+      };
       if (initial?.id) {
-        await bankAPI.updateAccount(initial.id, { name, institution, account_mask: mask, current_balance: balance, available_balance: balance });
+        await bankAPI.updateAccount(initial.id, payload);
       } else {
-        await bankAPI.createAccount({ name, institution, account_mask: mask, current_balance: parseFloat(balance) || 0, available_balance: parseFloat(balance) || 0 });
+        await bankAPI.createAccount(payload);
       }
       onSave();
     } catch (err) {
@@ -146,10 +160,24 @@ function ManualAccountForm({ onSave, onCancel, initial }) {
           <input className="input-field" placeholder="1234" maxLength={4} value={mask} onChange={e => setMask(e.target.value)} />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Current Balance</label>
-          <input className="input-field" type="number" step="0.01" placeholder="0.00" value={balance} onChange={e => setBalance(e.target.value)} />
+          <label className="block text-xs font-medium text-gray-700 mb-1">Starting Balance</label>
+          <input className="input-field" type="number" step="0.01" placeholder="0.00" value={opening} onChange={e => setOpening(e.target.value)} />
+        </div>
+        <div className="col-span-2">
+          <label className="block text-xs font-medium text-gray-700 mb-1">Starting Balance As Of</label>
+          <input className="input-field" type="date" value={openingDate} onChange={e => setOpeningDate(e.target.value)} />
         </div>
       </div>
+      <p className="text-xs text-gray-500">
+        Set the starting balance for the year (or when you begin tracking). Book balance =
+        starting balance + imported bank deposits − withdrawals. Givelify gifts update funds separately;
+        cash appears on the bank CSV as a Givelify deposit.
+      </p>
+      {initial?.calculated_balance != null && (
+        <p className="text-sm text-blue-800 bg-blue-50 rounded p-2">
+          Calculated book balance: <strong>{fmt(initial.calculated_balance)}</strong>
+        </p>
+      )}
       <div className="flex gap-2 pt-1">
         <button type="submit" className="btn-primary text-sm" disabled={saving}>{saving ? 'Saving...' : (initial?.id ? 'Save Changes' : 'Add Account')}</button>
         <button type="button" className="btn-secondary text-sm" onClick={onCancel}>Cancel</button>
@@ -174,21 +202,24 @@ function AccountCard({ acc, canManage, onEdit, onDeactivate }) {
       </div>
       <div className="mt-4 space-y-2">
         <div className="flex justify-between">
-          <span className="text-gray-600">Current Balance</span>
-          <span className="font-bold text-blue-700">{fmt(acc.current_balance)}</span>
+          <span className="text-gray-600">Book Balance (calculated)</span>
+          <span className="font-bold text-blue-700">{fmt(acc.calculated_balance ?? acc.current_balance)}</span>
         </div>
-        <div className="flex justify-between">
-          <span className="text-gray-600">Available Balance</span>
-          <span className="font-medium text-gray-900">{fmt(acc.available_balance)}</span>
+        <div className="flex justify-between text-sm">
+          <span className="text-gray-500">Starting balance</span>
+          <span className="text-gray-700">{fmt(acc.opening_balance)}</span>
         </div>
-        {acc.balance_last_updated && (
-          <p className="text-xs text-gray-400 pt-1">Last updated: {new Date(acc.balance_last_updated).toLocaleString()}</p>
+        {acc.opening_balance_date && (
+          <p className="text-xs text-gray-400">Starting as of {String(acc.opening_balance_date).slice(0, 10)}</p>
         )}
+        <p className="text-xs text-gray-500 pt-1">
+          Not a live bank feed — compare to your statement when reconciling.
+        </p>
       </div>
       {canManage && (
         <div className="flex gap-2 mt-4 pt-3 border-t border-gray-100">
           <button className="text-xs btn-secondary py-1 px-2" onClick={() => onEdit(acc)}>
-            ✏️ Edit Balance
+            ✏️ Edit Starting Balance
           </button>
           <button className="text-xs text-red-600 hover:text-red-800 py-1 px-2" onClick={() => onDeactivate(acc.id)}>
             🗑 Remove
@@ -278,9 +309,14 @@ export default function BankPage({ user }) {
             <div className="card mb-6 bg-blue-50 border border-blue-200">
               <div className="flex justify-between items-center">
                 <div>
-                  <p className="text-sm text-blue-700">Total Balance — All Accounts</p>
+                  <p className="text-sm text-blue-700">Total Book Balance — All Accounts</p>
                   <p className="text-3xl font-bold text-blue-800">{fmt(balances.total_balance)}</p>
-                  <p className="text-xs text-blue-500 mt-1">{accounts.length} account{accounts.length !== 1 ? 's' : ''}</p>
+                  <p className="text-xs text-blue-600 mt-1">
+                    {accounts.length} account{accounts.length !== 1 ? 's' : ''} · calculated from starting balance + bank imports
+                  </p>
+                  {balances.note && (
+                    <p className="text-xs text-blue-700 mt-2 max-w-xl">{balances.note}</p>
+                  )}
                 </div>
                 <span className="text-4xl">🏦</span>
               </div>
@@ -342,7 +378,8 @@ export default function BankPage({ user }) {
                 <tr className="border-b"><td className="py-1 pr-4 font-mono">date</td><td className="pr-4">Yes</td><td>Also accepts posted_date, posting_date, transaction_date</td></tr>
                 <tr className="border-b"><td className="py-1 pr-4 font-mono">amount</td><td className="pr-4">Yes*</td><td>Positive = income, negative = expense. Parentheses are treated as negative.</td></tr>
                 <tr className="border-b"><td className="py-1 pr-4 font-mono">debit / credit</td><td className="pr-4">Yes*</td><td>Use instead of amount when your bank splits withdrawals and deposits</td></tr>
-                <tr className="border-b"><td className="py-1 pr-4 font-mono">description</td><td className="pr-4">No</td><td>Also accepts memo, details, name</td></tr>
+                <tr className="border-b"><td className="py-1 pr-4 font-mono">name / description</td><td className="pr-4">No</td><td>Prefer Name/payee; skips junk like &quot;Download from usbank.com&quot;</td></tr>
+                <tr className="border-b"><td className="py-1 pr-4 font-mono">transaction</td><td className="pr-4">No</td><td>US Bank Credit/Debit column (sets income vs expense)</td></tr>
                 <tr className="border-b"><td className="py-1 pr-4 font-mono">type</td><td className="pr-4">No</td><td>income or expense; inferred from amount when omitted</td></tr>
                 <tr className="border-b"><td className="py-1 pr-4 font-mono">check_number</td><td className="pr-4">No</td><td>Check number if applicable</td></tr>
                 <tr><td className="py-1 pr-4 font-mono">notes</td><td className="pr-4">No</td><td>Additional notes</td></tr>
@@ -388,14 +425,16 @@ export default function BankPage({ user }) {
           </div>
 
           <div className="card bg-gray-50 border border-gray-200">
-            <h3 className="font-bold text-gray-800 mb-3">🖊️ Manual Balance Updates</h3>
+            <h3 className="font-bold text-gray-800 mb-3">Starting balance &amp; reconciliation</h3>
             <p className="text-sm text-gray-700 mb-2">
-              You can also add accounts and update their balances manually without importing transactions.
-              This is useful for accounts you reconcile monthly.
+              Book balance is calculated: starting balance + imported bank deposits − withdrawals.
+              Set the starting balance (e.g. Jan 1) when you add or edit an account. Compare the calculated
+              total to your bank statement — StewardView is not a live feed.
             </p>
             <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
-              <li>Go to the <strong>Accounts</strong> tab and click <strong>Add Account</strong></li>
-              <li>Click <strong>Edit Balance</strong> on any account to update it</li>
+              <li>Givelify gifts update <strong>funds / budget income</strong>, not bank cash</li>
+              <li>When Givelify settles, the bank CSV shows a deposit — that row updates the bank balance</li>
+              <li>Leave bank Givelify deposits uncategorized (or use a non-budget category) so income is not double-counted</li>
             </ul>
           </div>
 

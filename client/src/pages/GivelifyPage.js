@@ -215,6 +215,10 @@ export default function GivelifyPage({ user }) {
                 Envelopes/campaigns are matched to your funds. <strong>Donor names and emails are not stored</strong> —
                 keep individual giver records in Givelify. Re-importing also clears any previously stored donor details.
               </p>
+              <div className="mb-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+                Givelify rows update <strong>funds and budget income</strong> — they are not bank cash.
+                When Givelify settles, your bank CSV will show a deposit; import that on Bank to update the book balance.
+              </div>
               <p className="text-xs text-gray-400 mb-3">
                 Uses amount / gross amount, date, envelope / campaign / fund, and donation ID. Names in the CSV are ignored.
               </p>

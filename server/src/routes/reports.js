@@ -108,11 +108,35 @@ router.get('/dashboard', authenticate, requireTenant, async (req, res) => {
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
     const endDate = new Date(year, month, 0).toISOString().slice(0, 10);
 
-    // Bank balances
-    const bankAccounts = await db('bank_accounts').where({ is_active: true, tenant_id: req.tenantId });
-    const totalBankBalance = bankAccounts.reduce((s, a) => s + parseFloat(a.current_balance || 0), 0);
+    // Bank balances (calculated from opening + bank-linked transactions)
+    const bankAccountsRaw = await db('bank_accounts').where({ is_active: true, tenant_id: req.tenantId });
+    const bankAccounts = [];
+    for (const acc of bankAccountsRaw) {
+      const opening = parseFloat(acc.opening_balance != null ? acc.opening_balance : acc.current_balance) || 0;
+      const incomeRow = await db('transactions')
+        .where({ tenant_id: req.tenantId, bank_account_id: acc.id, type: 'income' })
+        .where('status', '!=', 'void')
+        .sum('amount as total')
+        .first();
+      const expenseRow = await db('transactions')
+        .where({ tenant_id: req.tenantId, bank_account_id: acc.id, type: 'expense' })
+        .where('status', '!=', 'void')
+        .sum('amount as total')
+        .first();
+      const income = parseFloat(incomeRow?.total) || 0;
+      const expense = parseFloat(expenseRow?.total) || 0;
+      const calculated = Math.round((opening + income - expense) * 100) / 100;
+      bankAccounts.push({
+        ...acc,
+        opening_balance: opening,
+        calculated_balance: calculated,
+        current_balance: calculated,
+        balance_is_calculated: true,
+      });
+    }
+    const totalBankBalance = bankAccounts.reduce((s, a) => s + parseFloat(a.calculated_balance || 0), 0);
 
-    // Month income & expenses
+    // Month income & expenses (all books activity, including Givelify fund gifts)
     const monthIncome = await db('transactions')
       .where('type', 'income').where('status', '!=', 'void').where('tenant_id', req.tenantId)
       .whereBetween('date', [startDate, endDate])
@@ -136,7 +160,12 @@ router.get('/dashboard', authenticate, requireTenant, async (req, res) => {
       .limit(10);
 
     res.json({
-      bank: { accounts: bankAccounts, total_balance: totalBankBalance },
+      bank: {
+        accounts: bankAccounts,
+        total_balance: totalBankBalance,
+        balance_is_calculated: true,
+        note: 'Bank totals are calculated from each account’s starting balance plus imported bank transactions. Compare to your bank statement when reconciling — StewardView is not a live bank feed.',
+      },
       month: {
         year, month,
         income: parseFloat(monthIncome.total) || 0,
