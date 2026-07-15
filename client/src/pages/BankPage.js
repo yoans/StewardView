@@ -453,8 +453,8 @@ export default function BankPage({ user }) {
             </p>
             <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
               <li>Givelify gifts update <strong>funds</strong> on Givelify import — not when the bank deposit hits</li>
-              <li><strong>5/3 BANKCARD SYS</strong> deposits are Givelify settlements (via Fifth Third’s card processor), not a separate bank account — imported with no fund tag</li>
-              <li>Other deposits (e.g. Name = DEPOSIT) default to <strong>General Fund</strong>; change the fund on Transactions if needed</li>
+              <li><strong>5/3 BANKCARD SYS</strong> = Givelify settlement — shown as <strong>Automatic</strong> on Transactions (no fund tag, avoids double-count)</li>
+              <li>Other deposits default to <strong>General Fund</strong>; change the fund on Transactions if needed</li>
               <li>Imported <strong>expenses</strong> draw from the <strong>General Fund</strong> by default</li>
               <li>Sum of all fund balances should equal the checking book balance — flagged on Dashboard, Bank, and Funds</li>
             </ul>

@@ -4,6 +4,16 @@ import { formatDate } from '../utils/format';
 
 const fmt = (n) => parseFloat(n || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
+/** Bank settlement from Givelify (5/3 BANKCARD) — funds already counted on Givelify import. */
+function isGivelifyBankSettlement(txn) {
+  if (!txn || txn.type !== 'income') return false;
+  const hay = `${txn.description || ''} ${txn.payee_payer || ''} ${txn.notes || ''}`.toLowerCase();
+  if (hay.includes('givelify')) return true;
+  if (/5\s*\/\s*3/.test(hay) && hay.includes('bankcard')) return true;
+  if (hay.includes('likely givelify settlement')) return true;
+  return false;
+}
+
 export default function TransactionsPage({ user }) {
   const [transactions, setTransactions] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -41,11 +51,31 @@ export default function TransactionsPage({ user }) {
         categoriesAPI.list(),
         fundsAPI.list(),
       ]);
-      setTransactions(txnRes.data);
       setCategories(catRes.data);
       setFunds(fundRes.data);
       const gf = fundRes.data.find(f => f.name === 'General Fund');
       setForm(prev => (prev.fund_id || !gf ? prev : { ...prev, fund_id: String(gf.id) }));
+
+      let txns = txnRes.data;
+      // Non-Givelify rows with no fund → assign General Fund (only Givelify stays untagged / Automatic)
+      if (canEdit && gf?.id) {
+        const needsFund = txns.filter(
+          (t) => t.status !== 'void' && !t.fund_id && !isGivelifyBankSettlement(t)
+        );
+        if (needsFund.length) {
+          await Promise.all(
+            needsFund.map((t) =>
+              transactionsAPI.update(t.id, {
+                fund_id: gf.id,
+                change_reason: 'Defaulted to General Fund',
+              }).catch(() => null)
+            )
+          );
+          const refreshed = await transactionsAPI.list(filters);
+          txns = refreshed.data;
+        }
+      }
+      setTransactions(txns);
     } catch (err) { console.error(err); }
     setLoading(false);
   };
@@ -61,7 +91,7 @@ export default function TransactionsPage({ user }) {
         ...form,
         amount: parseFloat(form.amount),
         category_id: form.category_id ? parseInt(form.category_id) : null,
-        fund_id: form.fund_id ? parseInt(form.fund_id) : null,
+        fund_id: form.fund_id ? parseInt(form.fund_id) : (generalFundId || null),
       });
       setShowForm(false);
       setForm(emptyForm());
@@ -83,14 +113,13 @@ export default function TransactionsPage({ user }) {
   };
 
   const handleFundChange = async (txn, fundId) => {
-    const next = fundId ? parseInt(fundId, 10) : null;
+    if (isGivelifyBankSettlement(txn)) return; // Automatic — do not assign a fund
+    const next = fundId ? parseInt(fundId, 10) : (generalFundId || null);
     if (String(next || '') === String(txn.fund_id || '')) return;
     try {
       await transactionsAPI.update(txn.id, {
         fund_id: next,
-        change_reason: next
-          ? 'Assigned deposit/spend to fund'
-          : 'Cleared fund (e.g. Givelify settlement — already on funds)',
+        change_reason: 'Assigned to fund',
       });
       loadData();
     } catch (err) {
@@ -156,20 +185,16 @@ export default function TransactionsPage({ user }) {
               </select>
             </div>
             <div>
-              <label className="label">Fund {form.type === 'expense' ? '*' : ''}</label>
+              <label className="label">Fund</label>
               <select
                 className="input"
-                value={form.fund_id}
+                value={form.fund_id || (generalFundId ? String(generalFundId) : '')}
                 onChange={e => setForm({...form, fund_id: e.target.value})}
-                required={form.type === 'expense'}
               >
-                <option value="">{form.type === 'expense' ? '— General Fund —' : '— None —'}</option>
                 {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
               </select>
               <p className="text-xs text-gray-500 mt-1">
-                {form.type === 'expense'
-                  ? 'Debits reduce the selected fund (defaults to General Fund).'
-                  : 'Tag plate/other contributions to a fund. Leave None for Givelify bank settlements (already counted on Givelify import).'}
+                Defaults to General Fund. Givelify bank settlements are labeled Automatic and skip a fund so gifts aren’t double-counted.
               </p>
             </div>
             <div>
@@ -240,22 +265,32 @@ export default function TransactionsPage({ user }) {
                     <td className="py-2 text-gray-600">{txn.payee_payer || '—'}</td>
                     <td className="py-2 text-gray-600">{txn.category_name || '—'}</td>
                     <td className="py-2 text-gray-600">
-                      {canEdit && !isCanceled ? (
-                        <select
-                          className="input py-1 text-sm min-w-[10rem]"
-                          value={txn.fund_id || ''}
-                          onChange={(e) => handleFundChange(txn, e.target.value)}
-                          title={txn.type === 'income' ? 'Fund this deposit credits' : 'Fund this debit spends from'}
-                        >
-                          <option value="">{txn.type === 'expense' ? '— General Fund —' : '— None —'}</option>
-                          {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                        </select>
-                      ) : (
-                        txn.fund_name || '—'
-                      )}
-                      {txn.type === 'income' && !txn.fund_id && /givelify|5\/3|bankcard/i.test(`${txn.description || ''} ${txn.notes || ''}`) && (
-                        <p className="text-[10px] text-gray-400 mt-0.5">Givelify settlement</p>
-                      )}
+                      {(() => {
+                        const givelifyAuto = isGivelifyBankSettlement(txn);
+                        if (givelifyAuto) {
+                          return (
+                            <span
+                              className="inline-block text-xs font-medium bg-slate-100 text-slate-700 px-2 py-1 rounded"
+                              title="Givelify settlement via 5/3 BANKCARD — funds already counted on Givelify import"
+                            >
+                              Automatic
+                            </span>
+                          );
+                        }
+                        if (canEdit && !isCanceled) {
+                          return (
+                            <select
+                              className="input py-1 text-sm min-w-[10rem]"
+                              value={txn.fund_id || generalFundId || ''}
+                              onChange={(e) => handleFundChange(txn, e.target.value)}
+                              title={txn.type === 'income' ? 'Fund this deposit credits' : 'Fund this debit spends from'}
+                            >
+                              {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                            </select>
+                          );
+                        }
+                        return txn.fund_name || (generalFundId ? 'General Fund' : '—');
+                      })()}
                     </td>
                     <td className={`py-2 text-right font-medium ${txn.type === 'income' ? 'text-green-600' : 'text-red-600'} ${isCanceled ? 'line-through' : ''}`}>
                       {txn.type === 'income' ? '+' : '-'}{fmt(txn.amount)}
