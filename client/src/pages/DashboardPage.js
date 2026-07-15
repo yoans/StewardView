@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { reportsAPI } from '../services/api';
-import { formatDate, transactionStatusDisplay } from '../utils/format';
+import { formatDate } from '../utils/format';
 
 const fmt = (n) => parseFloat(n || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
@@ -157,27 +157,23 @@ export default function DashboardPage({ tenant }) {
                 <th className="pb-2">Date</th>
                 <th className="pb-2">Description</th>
                 <th className="pb-2">Category</th>
-                <th className="pb-2">Status</th>
                 <th className="pb-2 text-right">Amount</th>
               </tr>
             </thead>
             <tbody>
-              {data.recent_transactions.map(txn => {
-                const status = transactionStatusDisplay(txn.status);
-                return (
-                <tr key={txn.id} className="border-b last:border-0 hover:bg-gray-50">
+              {data.recent_transactions.map(txn => (
+                <tr key={txn.id} className={`border-b last:border-0 hover:bg-gray-50 ${txn.status === 'void' ? 'opacity-60' : ''}`}>
                   <td className="py-2 text-gray-600">{formatDate(txn.date)}</td>
-                  <td className="py-2 font-medium text-gray-900">{txn.description}</td>
-                  <td className="py-2 text-gray-600">{txn.category_name}</td>
-                  <td className="py-2">
-                    <span className={status.badge}>{status.label}</span>
+                  <td className="py-2 font-medium text-gray-900">
+                    {txn.description}
+                    {txn.status === 'void' && <span className="badge-void ml-2">Canceled</span>}
                   </td>
-                  <td className={`py-2 text-right font-medium ${txn.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
+                  <td className="py-2 text-gray-600">{txn.category_name}</td>
+                  <td className={`py-2 text-right font-medium ${txn.type === 'income' ? 'text-green-600' : 'text-red-600'} ${txn.status === 'void' ? 'line-through' : ''}`}>
                     {txn.type === 'income' ? '+' : '-'}{fmt(txn.amount)}
                   </td>
                 </tr>
-                );
-              })}
+              ))}
             </tbody>
           </table>
         </div>

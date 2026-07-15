@@ -90,22 +90,11 @@ export default function AdminPage({ user, tenant, onTenantUpdated }) {
         setSuccess('User deactivated');
       } else {
         await authAPI.updateUser(u.id, { is_approved: true });
-        setSuccess(u.is_approved ? 'User reactivated' : 'User approved');
+        setSuccess('User reactivated');
       }
       loadUsers();
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to update user');
-    }
-  };
-
-  const handleApproveUser = async (userId) => {
-    setError(''); setSuccess('');
-    try {
-      await authAPI.updateUser(userId, { is_approved: true });
-      setSuccess('User approved');
-      loadUsers();
-    } catch (err) {
-      setError(err.response?.data?.error || 'Failed to approve user');
     }
   };
 
@@ -125,7 +114,7 @@ export default function AdminPage({ user, tenant, onTenantUpdated }) {
     setError(''); setSuccess('');
     try {
       await authAPI.createUser({ email: newEmail, name: newName, role: newRole });
-      setSuccess('Setup link sent. Approve the user after they choose a password.');
+      setSuccess('Invite sent. They can sign in after setting a password — no extra approval needed.');
       setNewEmail(''); setNewName(''); setNewRole('viewer');
       loadUsers();
       setTab('users');
@@ -179,16 +168,14 @@ export default function AdminPage({ user, tenant, onTenantUpdated }) {
   const adminCount = users.filter(u => u.role === 'admin' && u.is_active).length;
 
   const userStatus = (u) => {
-    if (u.must_set_password) return 'Invited';
-    if (!u.is_active && !u.is_approved) return 'Pending approval';
+    if (u.must_set_password) return 'Invited — set password';
     if (!u.is_active) return 'Inactive';
     return 'Active';
   };
 
   const statusClasses = (status) => ({
     Active: 'bg-green-100 text-green-800',
-    Invited: 'bg-blue-100 text-blue-800',
-    'Pending approval': 'bg-yellow-100 text-yellow-800',
+    'Invited — set password': 'bg-blue-100 text-blue-800',
     Inactive: 'bg-red-100 text-red-800',
   }[status] || 'bg-gray-100 text-gray-700');
 
@@ -262,17 +249,12 @@ export default function AdminPage({ user, tenant, onTenantUpdated }) {
                         </span>
                       </td>
                       <td className="py-3 space-x-3">
-                        {!u.is_approved && u.id !== user.id && (
-                          <button className="text-xs text-green-600 hover:text-green-800" onClick={() => handleApproveUser(u.id)}>
-                            Approve
-                          </button>
-                        )}
                         {u.must_set_password && u.id !== user.id && (
                           <button className="text-xs text-blue-600 hover:text-blue-800" onClick={() => handleResendInvite(u.id)}>
                             Resend setup link
                           </button>
                         )}
-                        {u.id !== user.id && u.is_approved && (
+                        {u.id !== user.id && u.is_approved && !u.must_set_password && (
                           <button
                             className={`text-xs ${u.is_active ? 'text-red-600 hover:text-red-800' : 'text-green-600 hover:text-green-800'}`}
                             onClick={() => handleToggleActive(u)}

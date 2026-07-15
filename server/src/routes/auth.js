@@ -138,6 +138,7 @@ router.post('/verify-mfa', async (req, res) => {
       entityType: 'user', entityId: user.id, action: 'login',
       newValues: { email: user.email, mfa: true }, userName: user.name,
       ipAddress: req.ip,
+      tenantId: user.tenant_id || null,
     });
 
     res.json({ token, user: payload });
@@ -251,7 +252,7 @@ router.post('/accept-invite', async (req, res) => {
       userName: user.name, ipAddress: req.ip, tenantId: user.tenant_id || null,
     });
 
-    res.json({ message: 'Password set successfully. An admin must approve your account before you can sign in.' });
+    res.json({ message: 'Password set successfully. You can sign in now.' });
   } catch (err) {
     console.error('Accept invite error:', err);
     res.status(500).json({ error: 'Could not complete account setup' });
@@ -353,8 +354,13 @@ router.post('/users', authenticate, requireTenant, authorize('admin'), async (re
     const hash = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10);
     const [{ id }] = await db('users').insert({
       email, password_hash: hash, name, role: role || 'viewer',
-      tenant_id: req.tenantId, is_active: false, is_approved: false,
-      must_set_password: true, invited_at: new Date(),
+      tenant_id: req.tenantId,
+      is_active: true,
+      is_approved: true,
+      approved_at: new Date(),
+      approved_by: req.user.id,
+      must_set_password: true,
+      invited_at: new Date(),
     }).returning('id');
 
     const token = await createInviteToken(id);
@@ -362,12 +368,15 @@ router.post('/users', authenticate, requireTenant, authorize('admin'), async (re
 
     await logAudit({
       entityType: 'user', entityId: id, action: 'invite',
-      newValues: { email, name, role, tenant_id: req.tenantId, is_approved: false },
+      newValues: { email, name, role, tenant_id: req.tenantId, is_approved: true, auto_approved: true },
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
       tenantId: req.tenantId,
     });
 
-    res.status(201).json({ id, email, name, role: role || 'viewer', is_active: false, is_approved: false, must_set_password: true });
+    res.status(201).json({
+      id, email, name, role: role || 'viewer',
+      is_active: true, is_approved: true, must_set_password: true,
+    });
   } catch (err) {
     console.error('Create user error:', err);
     res.status(500).json({ error: 'Server error' });

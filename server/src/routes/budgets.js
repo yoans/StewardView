@@ -105,6 +105,7 @@ router.post('/', authenticate, requireTenant, authorize('admin', 'treasurer'), a
         oldValues: { budgeted_amount: existing.budgeted_amount },
         newValues: { budgeted_amount },
         userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+        tenantId: req.tenantId || req.user?.tenant_id || null,
       });
       const updated = await db('budgets').where({ id: existing.id }).first();
       return res.json(updated);
@@ -115,6 +116,7 @@ router.post('/', authenticate, requireTenant, authorize('admin', 'treasurer'), a
       entityType: 'budget', entityId: id, action: 'create',
       newValues: { year, month, category_id, budgeted_amount },
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+      tenantId: req.tenantId || req.user?.tenant_id || null,
     });
 
     const budget = await db('budgets').where({ id }).first();
@@ -145,6 +147,7 @@ router.put('/:id', authenticate, requireTenant, authorize('admin', 'treasurer'),
       newValues: updates,
       changeReason: req.body.change_reason,
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+      tenantId: req.tenantId || req.user?.tenant_id || null,
     });
 
     const updated = await db('budgets')
@@ -171,6 +174,7 @@ router.delete('/:id', authenticate, requireTenant, authorize('admin', 'treasurer
       entityType: 'budget', entityId: existing.id, action: 'delete',
       oldValues: existing,
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+      tenantId: req.tenantId || req.user?.tenant_id || null,
     });
 
     res.json({ message: 'Budget entry deleted', id: existing.id });
@@ -203,6 +207,7 @@ router.post('/copy', authenticate, requireTenant, authorize('admin', 'treasurer'
       entityType: 'budget', entityId: 0, action: 'copy',
       newValues: { from: `${from_year}-${from_month}`, to: `${to_year}-${to_month}`, count: newBudgets.length },
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+      tenantId: req.tenantId || req.user?.tenant_id || null,
     });
 
     res.json({ message: `Copied ${newBudgets.length} budget lines`, from: `${from_year}-${from_month}`, to: `${to_year}-${to_month}` });

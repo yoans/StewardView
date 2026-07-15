@@ -61,6 +61,7 @@ router.post('/monthly/generate', authenticate, requireTenant, authorize('admin',
       entityType: 'report', entityId: 0, action: 'generate',
       newValues: { year, month, fileName },
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+      tenantId: req.tenantId || req.user?.tenant_id || null,
     });
 
     res.json({ message: 'Report generated', file: fileName, data: reportData });
@@ -79,6 +80,12 @@ router.get('/monthly/download', authenticate, requireTenant, async (req, res) =>
     if (!report || !report.file_path || !fs.existsSync(report.file_path)) {
       return res.status(404).json({ error: 'Report not found. Generate it first.' });
     }
+    await logAudit({
+      entityType: 'report', entityId: report.id, action: 'download',
+      newValues: { year, month, file_path: report.file_path },
+      userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+      tenantId: req.tenantId,
+    });
     res.download(report.file_path);
   } catch (err) {
     console.error('Download report error:', err);

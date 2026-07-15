@@ -328,7 +328,6 @@ export default function FundsPage({ user }) {
                       <th className="pb-2">Date</th>
                       <th className="pb-2">Type</th>
                       <th className="pb-2">Description</th>
-                      <th className="pb-2">Donor</th>
                       <th className="pb-2 text-right">Amount</th>
                     </tr>
                   </thead>
@@ -344,7 +343,6 @@ export default function FundsPage({ user }) {
                             </span>
                           </td>
                           <td className="py-2 text-gray-900">{txn.description}</td>
-                          <td className="py-2 text-gray-600">{txn.donor_name || '\u2014'}</td>
                           <td className={`py-2 text-right font-medium ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
                             {isPositive ? '+' : '-'}{fmt(txn.amount)}
                           </td>
@@ -352,7 +350,7 @@ export default function FundsPage({ user }) {
                       );
                     })}
                     {(!selectedFund.recent_activity || selectedFund.recent_activity.length === 0) && (
-                      <tr><td colSpan="5" className="py-4 text-center text-gray-400">No activity yet</td></tr>
+                      <tr><td colSpan="4" className="py-4 text-center text-gray-400">No activity yet</td></tr>
                     )}
                   </tbody>
                 </table>

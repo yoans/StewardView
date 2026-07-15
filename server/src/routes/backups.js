@@ -59,6 +59,7 @@ router.post('/', authenticate, requireTenant, authorize('admin'), async (req, re
       entityType: 'backup', entityId: id, action: 'create',
       newValues: { type: 'manual', tables: tablesBackedUp.length, rows: totalRows },
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+      tenantId: req.tenantId || req.user?.tenant_id || null,
     });
 
     res.status(201).json({
@@ -115,6 +116,7 @@ router.delete('/:id', authenticate, requireTenant, authorize('admin'), async (re
     await logAudit({
       entityType: 'backup', entityId: backup.id, action: 'delete',
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+      tenantId: req.tenantId || req.user?.tenant_id || null,
     });
 
     res.json({ message: 'Backup data deleted' });

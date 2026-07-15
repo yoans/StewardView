@@ -36,6 +36,7 @@ router.post('/', authenticate, requireTenant, authorize('admin', 'treasurer'), a
       entityType: 'fund', entityId: id, action: 'create',
       newValues: { name, description, target_amount, is_restricted },
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+      tenantId: req.tenantId || req.user?.tenant_id || null,
     });
 
     const fund = await db('funds').where({ id }).first();
@@ -64,6 +65,7 @@ router.put('/:id', authenticate, requireTenant, authorize('admin', 'treasurer'),
       oldValues: existing, newValues: updates,
       changeReason: req.body.change_reason,
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+      tenantId: req.tenantId || req.user?.tenant_id || null,
     });
 
     const updated = await db('funds').where({ id: req.params.id }).first();
@@ -105,6 +107,7 @@ router.post('/:id/transfer', authenticate, requireTenant, authorize('admin', 'tr
       entityType: 'fund', entityId: fromFund.id, action: 'transfer',
       newValues: { from_fund: fromFund.name, to_fund: toFund.name, amount },
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+      tenantId: req.tenantId || req.user?.tenant_id || null,
     });
 
     res.json({ message: 'Transfer completed', from: fromFund.name, to: toFund.name, amount });
@@ -149,6 +152,7 @@ router.post('/:id/adjust', authenticate, requireTenant, authorize('admin', 'trea
       oldValues: { current_balance: fund.current_balance },
       newValues: { adjustment: type, amount, description },
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+      tenantId: req.tenantId || req.user?.tenant_id || null,
     });
 
     const updated = await db('funds').where({ id: fund.id }).first();
@@ -234,6 +238,7 @@ router.post('/recurring', authenticate, requireTenant, authorize('admin', 'treas
       entityType: 'recurring_transfer', entityId: id, action: 'create',
       newValues: { from_fund: fromFund.name, to_fund: toFund.name, amount, frequency: freq },
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+      tenantId: req.tenantId || req.user?.tenant_id || null,
     });
 
     const created = await db('recurring_transfers').where({ id }).first();
@@ -256,6 +261,7 @@ router.delete('/recurring/:id', authenticate, requireTenant, authorize('admin', 
       entityType: 'recurring_transfer', entityId: rt.id, action: 'deactivate',
       oldValues: rt,
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+      tenantId: req.tenantId || req.user?.tenant_id || null,
     });
 
     res.json({ message: 'Recurring transfer deactivated' });

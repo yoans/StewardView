@@ -164,7 +164,6 @@ export default function GivelifyPage({ user }) {
                 <thead>
                   <tr className="text-left text-gray-500 border-b">
                     <th className="pb-2">Date</th>
-                    <th className="pb-2">Donor</th>
                     <th className="pb-2">Envelope</th>
                     <th className="pb-2 text-right">Amount</th>
                     <th className="pb-2">Fund</th>
@@ -174,12 +173,11 @@ export default function GivelifyPage({ user }) {
                 </thead>
                 <tbody>
                   {contributions.length === 0 ? (
-                    <tr><td colSpan="7" className="py-8 text-center text-gray-400">No Givelify contributions imported yet. Use "Import CSV" to get started.</td></tr>
+                    <tr><td colSpan="6" className="py-8 text-center text-gray-400">No Givelify contributions imported yet. Use "Import CSV" to get started.</td></tr>
                   ) : contributions.map(c => (
                     <tr key={c.id} className="border-b hover:bg-gray-50">
                       <td className="py-2 text-gray-600">{formatDate(c.date)}</td>
-                      <td className="py-2 font-medium text-gray-900">{c.donor_name}</td>
-                      <td className="py-2 text-gray-600">{c.envelope}</td>
+                      <td className="py-2 text-gray-900 font-medium">{c.envelope}</td>
                       <td className="py-2 text-right font-medium text-green-700">{fmt(c.amount)}</td>
                       <td className="py-2 text-gray-600">{c.fund_name || c.fund_mapping || '—'}</td>
                       <td className="py-2">
@@ -214,12 +212,11 @@ export default function GivelifyPage({ user }) {
               <h3 className="text-lg font-bold mb-2">Import from Givelify CSV</h3>
               <p className="text-sm text-gray-500 mb-4">
                 Export the Donations report from Givelify (CSV), then upload the file or paste it below.
-                Envelopes/campaigns are matched to your funds; matched gifts become income transactions
-                under Tithes &amp; Offerings or Directed Contributions for budget vs actual.
+                Envelopes/campaigns are matched to your funds. <strong>Donor names and emails are not stored</strong> —
+                keep individual giver records in Givelify. Re-importing also clears any previously stored donor details.
               </p>
               <p className="text-xs text-gray-400 mb-3">
-                Accepts common columns: donor name (or first/last), email, amount / gross amount, date,
-                envelope / campaign / fund, donation ID. Quoted fields and commas in names are fine.
+                Uses amount / gross amount, date, envelope / campaign / fund, and donation ID. Names in the CSV are ignored.
               </p>
 
               <div className="flex gap-2 mb-3">
@@ -237,7 +234,7 @@ export default function GivelifyPage({ user }) {
 
               <textarea
                 className="input w-full h-48 font-mono text-xs"
-                placeholder={'Donation ID,Donor Name,Email,Gross Amount,Date,Envelope\nGV-12345,John Smith,john@email.com,100.00,03/01/2026,Missions'}
+                placeholder={'Donation ID,Gross Amount,Date,Envelope\nGV-12345,100.00,03/01/2026,Missions'}
                 value={csvText}
                 onChange={e => setCsvText(e.target.value)}
               />

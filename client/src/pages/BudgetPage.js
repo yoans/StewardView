@@ -395,6 +395,8 @@ function MonthlyView({ data }) {
         </div>
       </div>
 
+      <BudgetVsActualChart summary={data.summary} />
+
       <div className="card overflow-x-auto">
         {data.line_items.length === 0 ? (
           <p className="py-8 text-center text-gray-400 text-sm">No budget lines for this month yet. Use Build Budget to set them.</p>
@@ -425,6 +427,105 @@ function MonthlyView({ data }) {
             </tbody>
           </table>
         )}
+      </div>
+    </div>
+  );
+}
+
+function BudgetVsActualChart({ summary }) {
+  const groups = [
+    {
+      label: 'Income',
+      budgeted: summary.total_budgeted_income || 0,
+      actual: summary.total_actual_income || 0,
+      budgetColor: '#86efac',
+      actualColor: '#16a34a',
+    },
+    {
+      label: 'Expenses',
+      budgeted: summary.total_budgeted_expense || 0,
+      actual: summary.total_actual_expense || 0,
+      budgetColor: '#fca5a5',
+      actualColor: '#dc2626',
+    },
+  ];
+
+  const maxVal = Math.max(
+    ...groups.flatMap(g => [g.budgeted, g.actual]),
+    1
+  );
+
+  const width = 560;
+  const height = 220;
+  const padL = 48;
+  const padB = 36;
+  const padT = 24;
+  const chartH = height - padT - padB;
+  const groupWidth = (width - padL - 24) / groups.length;
+
+  return (
+    <div className="card mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <h3 className="text-lg font-bold text-gray-900">Budget vs Actual</h3>
+        <div className="flex gap-4 text-xs text-gray-600">
+          <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-gray-300 inline-block" /> Budgeted</span>
+          <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-gray-700 inline-block" /> Actual</span>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <svg viewBox={`0 0 ${width} ${height}`} className="w-full max-w-2xl h-auto" role="img" aria-label="Budget versus actual bar chart">
+          {[0, 0.25, 0.5, 0.75, 1].map((t) => {
+            const y = padT + chartH * (1 - t);
+            const val = maxVal * t;
+            return (
+              <g key={t}>
+                <line x1={padL} x2={width - 8} y1={y} y2={y} stroke="#e5e7eb" strokeWidth="1" />
+                <text x={padL - 8} y={y + 4} textAnchor="end" fontSize="10" fill="#9ca3af">
+                  {val >= 1000 ? `${Math.round(val / 1000)}k` : Math.round(val)}
+                </text>
+              </g>
+            );
+          })}
+          {groups.map((g, i) => {
+            const cx = padL + groupWidth * i + groupWidth / 2;
+            const barW = Math.min(36, groupWidth * 0.28);
+            const gap = 8;
+            const budgetH = (g.budgeted / maxVal) * chartH;
+            const actualH = (g.actual / maxVal) * chartH;
+            return (
+              <g key={g.label}>
+                <rect
+                  x={cx - barW - gap / 2}
+                  y={padT + chartH - budgetH}
+                  width={barW}
+                  height={Math.max(budgetH, 0)}
+                  fill={g.budgetColor}
+                  rx="3"
+                />
+                <rect
+                  x={cx + gap / 2}
+                  y={padT + chartH - actualH}
+                  width={barW}
+                  height={Math.max(actualH, 0)}
+                  fill={g.actualColor}
+                  rx="3"
+                />
+                <text x={cx} y={height - 12} textAnchor="middle" fontSize="12" fontWeight="600" fill="#374151">
+                  {g.label}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+      <div className="grid grid-cols-2 gap-3 mt-2 text-sm">
+        {groups.map(g => (
+          <div key={g.label} className="bg-gray-50 rounded-lg px-3 py-2">
+            <p className="font-medium text-gray-800">{g.label}</p>
+            <p className="text-gray-500">Budgeted {fmt(g.budgeted)}</p>
+            <p className="text-gray-900 font-medium">Actual {fmt(g.actual)}</p>
+          </div>
+        ))}
       </div>
     </div>
   );

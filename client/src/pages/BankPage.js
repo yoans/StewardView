@@ -360,12 +360,31 @@ export default function BankPage({ user }) {
             <h3 className="font-bold text-indigo-900 mb-3">🏦 Import Workflow</h3>
             <p className="text-sm text-indigo-800 mb-3">Use the same repeatable workflow each statement period:</p>
             <ol className="text-sm text-indigo-800 space-y-2 list-decimal list-inside">
-              <li>Log in to your bank's website</li>
-              <li>Navigate to your account's transaction history</li>
+              <li>Log in to your bank&apos;s website</li>
+              <li>Navigate to your account&apos;s transaction history</li>
               <li>Set the date range you want to import</li>
-              <li>Look for a <strong>"Download"</strong> or <strong>"Export"</strong> button and choose <strong>CSV</strong></li>
-              <li>Upload the file, then review imported transactions for categories and funds</li>
+              <li>Look for a <strong>Download</strong> or <strong>Export</strong> button and choose <strong>CSV</strong></li>
+              <li>Upload the file here, then review imported transactions for categories and funds</li>
             </ol>
+          </div>
+
+          <div className="card bg-white border border-gray-200">
+            <h3 className="font-bold text-gray-900 mb-3">US Bank — export then import</h3>
+            <ol className="text-sm text-gray-700 space-y-2 list-decimal list-inside mb-3">
+              <li>Sign in at <strong>usbank.com</strong> (or the US Bank mobile app → Account details on web)</li>
+              <li>Open the checking (or savings) account you use for church funds</li>
+              <li>Go to <strong>Account activity</strong> / transaction history</li>
+              <li>Choose your date range (for example, last statement period)</li>
+              <li>Select <strong>Download</strong> / <strong>Export</strong> and pick <strong>CSV</strong> (not PDF)</li>
+              <li>In StewardView → Bank → Import, choose that US Bank account, then upload the CSV</li>
+              <li>On Transactions, assign categories (and funds if needed) for new rows</li>
+            </ol>
+            <p className="text-sm text-gray-600 mb-2">
+              US Bank CSVs usually include date, description, and amount (or withdrawal/deposit columns). StewardView accepts those names automatically.
+            </p>
+            <p className="text-xs text-gray-500">
+              Tip: import soon after each statement closes so duplicates stay low. Rows that already match date + amount + description are skipped.
+            </p>
           </div>
 
           <div className="card bg-gray-50 border border-gray-200">
@@ -375,8 +394,8 @@ export default function BankPage({ user }) {
               This is useful for accounts you reconcile monthly.
             </p>
             <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
-              <li>Go to the <strong>Accounts</strong> tab and click <strong>"Add Account"</strong></li>
-              <li>Click <strong>"Edit Balance"</strong> on any account to update it</li>
+              <li>Go to the <strong>Accounts</strong> tab and click <strong>Add Account</strong></li>
+              <li>Click <strong>Edit Balance</strong> on any account to update it</li>
             </ul>
           </div>
 

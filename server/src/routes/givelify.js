@@ -220,17 +220,71 @@ async function resolveIncomeCategoryId(fund, tenantId, trx = db) {
   return cat ? cat.id : null;
 }
 
+/** StewardView does not store donor identity — keep that in Givelify. */
+const ANON_DONOR_LABEL = null;
+
+function sanitizeImportRaw(raw) {
+  if (!raw || typeof raw !== 'object') return raw;
+  const scrubbed = { ...raw };
+  const piiKeys = [
+    'donor_name', 'donor', 'name', 'full_name', 'first_name', 'last_name',
+    'donor_first_name', 'donor_last_name', 'email', 'donor_email', 'email_address',
+    'phone', 'address', 'member_id', 'external_member_id',
+  ];
+  for (const key of Object.keys(scrubbed)) {
+    const norm = String(key).toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    if (piiKeys.includes(norm) || norm.includes('name') || norm.includes('email') || norm.includes('phone')) {
+      delete scrubbed[key];
+    }
+  }
+  return scrubbed;
+}
+
+async function scrubExistingDonorPii(tenantId) {
+  await db('givelify_contributions')
+    .where({ tenant_id: tenantId })
+    .update({ donor_name: null, donor_email: null });
+
+  await db('transactions')
+    .where({ tenant_id: tenantId })
+    .where(function () {
+      this.where('notes', 'like', '%Givelify%')
+        .orWhere('description', 'like', 'Givelify%');
+    })
+    .update({
+      payee_payer: 'Givelify',
+    });
+
+  // Strip parenthetical donor names from older Givelify descriptions
+  const dirty = await db('transactions')
+    .where({ tenant_id: tenantId })
+    .where('description', 'like', 'Givelify - %(%')
+    .select('id', 'description');
+  for (const row of dirty) {
+    const cleaned = String(row.description).replace(/\s*\([^)]*\)\s*$/, '').trim();
+    if (cleaned && cleaned !== row.description) {
+      await db('transactions').where({ id: row.id }).update({ description: cleaned });
+    }
+  }
+
+  await db('fund_transactions')
+    .where({ tenant_id: tenantId })
+    .where('description', 'like', 'Givelify%')
+    .update({ donor_name: null });
+}
+
 async function createEarmarkRecords({ gc, fund, amount, date, userId, tenantId, bankAccountId, trx, notePrefix = 'Imported from Givelify' }) {
   const ref_number = uuidv4();
   const categoryId = await resolveIncomeCategoryId(fund, tenantId, trx);
+  const envelope = gc.envelope || 'General';
 
   const [{ id: txnId }] = await trx('transactions').insert({
     ref_number,
     type: 'income',
     amount,
     date,
-    description: `Givelify - ${gc.envelope || 'General'} (${gc.donor_name || 'Anonymous'})`,
-    payee_payer: gc.donor_name || 'Givelify',
+    description: `Givelify - ${envelope}`,
+    payee_payer: 'Givelify',
     category_id: categoryId,
     bank_account_id: bankAccountId,
     fund_id: fund.id,
@@ -246,8 +300,8 @@ async function createEarmarkRecords({ gc, fund, amount, date, userId, tenantId, 
     type: 'contribution',
     amount,
     date,
-    description: `Givelify: ${gc.envelope || 'General'}`,
-    donor_name: gc.donor_name || 'Givelify',
+    description: `Givelify: ${envelope}`,
+    donor_name: ANON_DONOR_LABEL,
     created_by: userId,
     tenant_id: tenantId,
   });
@@ -259,6 +313,8 @@ async function createEarmarkRecords({ gc, fund, amount, date, userId, tenantId, 
     transaction_id: txnId,
     fund_id: fund.id,
     fund_mapping: fund.name,
+    donor_name: null,
+    donor_email: null,
   });
 
   return txnId;
@@ -279,7 +335,19 @@ router.get('/', authenticate, requireTenant, async (req, res) => {
     const offset = Math.max(parseInt(req.query.offset) || 0, 0);
     let query = db('givelify_contributions')
       .leftJoin('funds', 'givelify_contributions.fund_id', 'funds.id')
-      .select('givelify_contributions.*', 'funds.name as fund_name')
+      .select(
+        'givelify_contributions.id',
+        'givelify_contributions.givelify_id',
+        'givelify_contributions.amount',
+        'givelify_contributions.date',
+        'givelify_contributions.envelope',
+        'givelify_contributions.fund_mapping',
+        'givelify_contributions.fund_id',
+        'givelify_contributions.transaction_id',
+        'givelify_contributions.status',
+        'givelify_contributions.created_at',
+        'funds.name as fund_name'
+      )
       .where('givelify_contributions.tenant_id', req.tenantId)
       .orderBy('givelify_contributions.date', 'desc')
       .limit(limit)
@@ -337,9 +405,12 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
       return res.status(400).json({ error: 'Provide a csv string or contributions array' });
     }
 
-    const results = { imported: 0, skipped: 0, auto_earmarked: 0, pending: 0, errors: [] };
+    const results = { imported: 0, skipped: 0, auto_earmarked: 0, pending: 0, errors: [], scrubbed_existing_pii: true };
     const bankAccountId = await getDefaultBankAccountId(req.tenantId);
     const seenIds = new Set();
+
+    // Refresh anonymity for any previously imported donor details (no seed / demo data)
+    await scrubExistingDonorPii(req.tenantId);
 
     for (let i = 0; i < rows.length; i++) {
       const c = rows[i];
@@ -347,11 +418,11 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
 
       try {
         if (c.amount == null || Number.isNaN(c.amount) || c.amount <= 0) {
-          results.errors.push({ row: rowNum, error: `Invalid or missing amount`, data: c.raw || c });
+          results.errors.push({ row: rowNum, error: `Invalid or missing amount` });
           continue;
         }
         if (!c.date) {
-          results.errors.push({ row: rowNum, error: `Invalid or missing date`, data: c.raw || c });
+          results.errors.push({ row: rowNum, error: `Invalid or missing date` });
           continue;
         }
 
@@ -373,19 +444,25 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
         }
 
         const fund = await mapEnvelopeToFund(c.envelope, req.tenantId);
+        const safeRaw = sanitizeImportRaw(c.raw || {
+          amount: c.amount,
+          date: c.date,
+          envelope: c.envelope,
+          givelify_id: c.givelify_id,
+        });
 
         await db.transaction(async (trx) => {
           const [{ id: gcId }] = await trx('givelify_contributions').insert({
             givelify_id: c.givelify_id || null,
-            donor_name: c.donor_name || 'Anonymous',
-            donor_email: c.donor_email || null,
+            donor_name: null,
+            donor_email: null,
             amount,
             date: c.date,
             envelope: c.envelope || 'General',
             fund_mapping: fund ? fund.name : null,
             fund_id: fund ? fund.id : null,
             status: 'pending',
-            raw_data: JSON.stringify(c.raw || c),
+            raw_data: JSON.stringify(safeRaw),
             tenant_id: req.tenantId,
           }).returning('id');
 
@@ -394,7 +471,6 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
               gc: {
                 id: gcId,
                 envelope: c.envelope,
-                donor_name: c.donor_name,
                 givelify_id: c.givelify_id,
               },
               fund,
@@ -414,7 +490,7 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
           results.imported++;
         });
       } catch (rowErr) {
-        results.errors.push({ row: rowNum, error: rowErr.message, data: c.raw || c });
+        results.errors.push({ row: rowNum, error: rowErr.message });
       }
     }
 
@@ -426,8 +502,10 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
         auto_earmarked: results.auto_earmarked,
         pending: results.pending,
         error_count: results.errors.length,
+        donor_pii_scrubbed: true,
       },
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+      tenantId: req.tenantId || req.user?.tenant_id || null,
     });
 
     res.json(results);
@@ -470,6 +548,7 @@ router.post('/:id/earmark', authenticate, requireTenant, authorize('admin', 'tre
       entityType: 'givelify', entityId: gc.id, action: 'earmark',
       newValues: { fund_id, fund_name: fund.name, amount },
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+      tenantId: req.tenantId || req.user?.tenant_id || null,
     });
 
     res.json({ message: 'Contribution earmarked and imported', transaction_id: txnId });
@@ -518,6 +597,7 @@ router.put('/envelope-map', authenticate, requireTenant, authorize('admin', 'tre
       entityType: 'settings', entityId: 0, action: 'update',
       newValues: { givelify_envelope_map: normalized },
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+      tenantId: req.tenantId || req.user?.tenant_id || null,
     });
     res.json({ message: 'Envelope mapping updated', map: { ...DEFAULT_ENVELOPE_MAP, ...normalized } });
   } catch (err) {

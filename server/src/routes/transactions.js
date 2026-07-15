@@ -71,7 +71,7 @@ router.post('/', authenticate, requireTenant, authorize('admin', 'treasurer', 'f
     const [{ id }] = await db('transactions').insert({
       ref_number, type, amount, date, description, payee_payer,
       check_number, category_id, bank_account_id, fund_id,
-      notes, status: 'pending', created_by: req.user.id,
+      notes, status: 'cleared', created_by: req.user.id,
       tenant_id: req.tenantId,
     }).returning('id');
 
@@ -92,8 +92,9 @@ router.post('/', authenticate, requireTenant, authorize('admin', 'treasurer', 'f
 
     await logAudit({
       entityType: 'transaction', entityId: id, action: 'create',
-      newValues: { ref_number, type, amount, date, description, category_id, fund_id },
+      newValues: { ref_number, type, amount, date, description, category_id, fund_id, payee_payer, status: 'cleared' },
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+      tenantId: req.tenantId || req.user?.tenant_id || null,
     });
 
     const txn = await db('transactions').where({ id }).first();
@@ -133,6 +134,7 @@ router.put('/:id', authenticate, requireTenant, authorize('admin', 'treasurer', 
       oldValues: existing, newValues: updates,
       changeReason: req.body.change_reason,
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+      tenantId: req.tenantId || req.user?.tenant_id || null,
     });
 
     const updated = await db('transactions').where({ id: req.params.id }).first();
@@ -153,12 +155,14 @@ router.delete('/:id', authenticate, requireTenant, authorize('admin', 'treasurer
 
     await logAudit({
       entityType: 'transaction', entityId: existing.id, action: 'void',
-      oldValues: existing,
-      changeReason: req.body.change_reason || 'Transaction voided',
+      oldValues: { amount: existing.amount, date: existing.date, description: existing.description, status: existing.status },
+      newValues: { status: 'void' },
+      changeReason: req.body.change_reason || 'Transaction canceled',
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+      tenantId: req.tenantId || req.user?.tenant_id || null,
     });
 
-    res.json({ message: 'Transaction voided', id: existing.id });
+    res.json({ message: 'Transaction canceled', id: existing.id });
   } catch (err) {
     console.error('Void transaction error:', err);
     res.status(500).json({ error: 'Server error' });

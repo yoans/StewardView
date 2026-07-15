@@ -145,7 +145,7 @@ export default function LoginPage({ onLogin }) {
     setLoading(true);
     try {
       const res = await authAPI.acceptInvite(inviteToken, resetPassword);
-      setNotice(res.data.message || 'Password set. An admin must approve your account before you can sign in.');
+      setNotice(res.data.message || 'Password set. You can sign in now.');
       setPassword('');
       setResetPassword('');
       setResetConfirm('');

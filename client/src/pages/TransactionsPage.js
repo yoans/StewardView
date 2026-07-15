@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { transactionsAPI, categoriesAPI, fundsAPI } from '../services/api';
-import { formatDate, transactionStatusDisplay } from '../utils/format';
+import { formatDate } from '../utils/format';
 
 const fmt = (n) => parseFloat(n || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
@@ -55,24 +55,13 @@ export default function TransactionsPage({ user }) {
   };
 
   const handleCancel = async (id) => {
-    if (!window.confirm('Cancel this transaction?\n\nIt will stay in the list as Canceled and will not count toward totals. This is not a permanent delete.')) return;
+    if (!window.confirm('Cancel this transaction?\n\nIt stays in the list as Canceled and will not count toward totals. This is not a permanent delete.')) return;
     const reason = window.prompt('Optional note (why it was canceled):') || 'Canceled from transactions list';
     try {
       await transactionsAPI.void(id, reason);
       loadData();
     } catch (err) {
       alert(err.response?.data?.error || 'Failed to cancel transaction');
-    }
-  };
-
-  const handleMarkComplete = async (id) => {
-    const prev = transactions.find(t => t.id === id)?.status;
-    setTransactions(list => list.map(t => t.id === id ? { ...t, status: 'cleared' } : t));
-    try {
-      await transactionsAPI.update(id, { status: 'cleared' });
-    } catch (err) {
-      setTransactions(list => list.map(t => t.id === id ? { ...t, status: prev } : t));
-      alert(err.response?.data?.error || 'Failed to update status');
     }
   };
 
@@ -180,51 +169,37 @@ export default function TransactionsPage({ user }) {
                 <th className="pb-2">Payee/Payer</th>
                 <th className="pb-2">Category</th>
                 <th className="pb-2">Fund</th>
-                <th className="pb-2">Status</th>
                 <th className="pb-2 text-right">Amount</th>
                 {canEdit && <th className="pb-2"></th>}
               </tr>
             </thead>
             <tbody>
               {transactions.map(txn => {
-                const status = transactionStatusDisplay(txn.status);
                 const isCanceled = txn.status === 'void';
-                const needsReview = txn.status === 'pending';
                 return (
                   <tr key={txn.id} className={`border-b last:border-0 hover:bg-gray-50 ${isCanceled ? 'opacity-60' : ''}`}>
                     <td className="py-2 text-gray-600">{formatDate(txn.date)}</td>
                     <td className="py-2 text-xs text-gray-400 font-mono">{txn.ref_number?.slice(0, 8)}</td>
-                    <td className="py-2 font-medium text-gray-900">{txn.description}</td>
+                    <td className="py-2 font-medium text-gray-900">
+                      {txn.description}
+                      {isCanceled && <span className="badge-void ml-2">Canceled</span>}
+                    </td>
                     <td className="py-2 text-gray-600">{txn.payee_payer || '—'}</td>
                     <td className="py-2 text-gray-600">{txn.category_name || '—'}</td>
                     <td className="py-2 text-gray-600">{txn.fund_name || '—'}</td>
-                    <td className="py-2">
-                      <span className={status.badge}>{status.label}</span>
-                    </td>
                     <td className={`py-2 text-right font-medium ${txn.type === 'income' ? 'text-green-600' : 'text-red-600'} ${isCanceled ? 'line-through' : ''}`}>
                       {txn.type === 'income' ? '+' : '-'}{fmt(txn.amount)}
                     </td>
                     {canEdit && (
-                      <td className="py-2">
+                      <td className="py-2 text-right">
                         {!isCanceled && (
-                          <div className="flex items-center justify-end gap-3 whitespace-nowrap">
-                            {needsReview && (
-                              <button
-                                type="button"
-                                className="text-xs font-medium text-blue-600 hover:text-blue-800"
-                                onClick={() => handleMarkComplete(txn.id)}
-                              >
-                                Mark complete
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              className="text-xs text-red-500 hover:text-red-700"
-                              onClick={() => handleCancel(txn.id)}
-                            >
-                              Cancel
-                            </button>
-                          </div>
+                          <button
+                            type="button"
+                            className="text-xs text-red-500 hover:text-red-700"
+                            onClick={() => handleCancel(txn.id)}
+                          >
+                            Cancel
+                          </button>
                         )}
                       </td>
                     )}
@@ -232,7 +207,7 @@ export default function TransactionsPage({ user }) {
                 );
               })}
               {transactions.length === 0 && (
-                <tr><td colSpan="9" className="py-8 text-center text-gray-400">No transactions found</td></tr>
+                <tr><td colSpan="8" className="py-8 text-center text-gray-400">No transactions found</td></tr>
               )}
             </tbody>
           </table>

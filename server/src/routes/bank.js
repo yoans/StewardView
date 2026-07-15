@@ -173,7 +173,15 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
 
     await logAudit({
       entityType: 'bank_import', entityId: account.id, action: 'import',
-      newValues: { file: req.file.originalname, imported, skipped },
+      newValues: {
+        file: req.file.originalname,
+        bank_account_id: account.id,
+        bank_account_name: account.name,
+        imported,
+        skipped,
+        error_count: errors.length,
+        errors: errors.slice(0, 10),
+      },
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip, tenantId: req.tenantId,
     });
 
@@ -216,6 +224,7 @@ router.post('/accounts', authenticate, requireTenant, authorize('admin', 'treasu
       entityType: 'bank_account', entityId: id, action: 'create',
       newValues: { name, institution },
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+      tenantId: req.tenantId || req.user?.tenant_id || null,
     });
 
     res.status(201).json({ id, message: 'Account created' });
@@ -248,6 +257,7 @@ router.put('/accounts/:id', authenticate, requireTenant, authorize('admin', 'tre
       entityType: 'bank_account', entityId: req.params.id, action: 'update',
       oldValues: account, newValues: updates,
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+      tenantId: req.tenantId || req.user?.tenant_id || null,
     });
 
     res.json({ message: 'Account updated' });
@@ -269,6 +279,7 @@ router.delete('/accounts/:id', authenticate, requireTenant, authorize('admin', '
       entityType: 'bank_account', entityId: req.params.id, action: 'deactivate',
       oldValues: { name: account.name }, newValues: { is_active: false },
       userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+      tenantId: req.tenantId || req.user?.tenant_id || null,
     });
 
     res.json({ message: 'Account removed' });
