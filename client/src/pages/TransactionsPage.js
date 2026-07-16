@@ -127,7 +127,22 @@ export default function TransactionsPage({ user }) {
     }
   };
 
+  const handleCategoryChange = async (txn, categoryId) => {
+    const next = categoryId ? parseInt(categoryId, 10) : null;
+    if (String(next || '') === String(txn.category_id || '')) return;
+    try {
+      await transactionsAPI.update(txn.id, {
+        category_id: next,
+        change_reason: 'Assigned budget category',
+      });
+      loadData();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to update category');
+    }
+  };
+
   const filteredCategories = categories.filter(c => !form.type || c.type === form.type);
+  const categoriesForTxn = (txn) => categories.filter((c) => c.type === txn.type);
 
   return (
     <div>
@@ -263,7 +278,23 @@ export default function TransactionsPage({ user }) {
                       {isCanceled && <span className="badge-void ml-2">Canceled</span>}
                     </td>
                     <td className="py-2 text-gray-600">{txn.payee_payer || '—'}</td>
-                    <td className="py-2 text-gray-600">{txn.category_name || '—'}</td>
+                    <td className="py-2 text-gray-600">
+                      {canEdit && !isCanceled ? (
+                        <select
+                          className="input py-1 text-sm min-w-[10rem]"
+                          value={txn.category_id || ''}
+                          onChange={(e) => handleCategoryChange(txn, e.target.value)}
+                          title="Budget category"
+                        >
+                          <option value="">— Uncategorized —</option>
+                          {categoriesForTxn(txn).map((c) => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        txn.category_name || '—'
+                      )}
+                    </td>
                     <td className="py-2 text-gray-600">
                       {(() => {
                         const givelifyAuto = isGivelifyBankSettlement(txn);

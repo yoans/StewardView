@@ -306,22 +306,14 @@ router.get('/tenant-info/:slug', async (req, res) => {
 
 // ── Seed default financial structure for new tenants ─────
 async function seedDefaultFinancialStructure(tenantId, userId) {
-  const categories = [
-    { name: 'Tithes & Offerings', type: 'income', description: 'General weekly contributions', tenant_id: tenantId },
-    { name: 'Directed Contributions', type: 'income', description: 'Funds given for specific purposes', tenant_id: tenantId },
-    { name: 'Special Events', type: 'income', description: 'VBS, fundraisers, etc.', tenant_id: tenantId },
-    { name: 'Interest Income', type: 'income', description: 'Bank interest', tenant_id: tenantId },
-    { name: 'Salaries & Benefits', type: 'expense', description: 'Minister, staff compensation', tenant_id: tenantId },
-    { name: 'Utilities', type: 'expense', description: 'Electric, water, gas, internet', tenant_id: tenantId },
-    { name: 'Building & Maintenance', type: 'expense', description: 'Repairs, janitorial, insurance', tenant_id: tenantId },
-    { name: 'Missions & Outreach', type: 'expense', description: 'Supported missionaries and programs', tenant_id: tenantId },
-    { name: 'Benevolence', type: 'expense', description: 'Member and community assistance', tenant_id: tenantId },
-    { name: 'Education & Youth', type: 'expense', description: 'Bible classes, VBS, youth events', tenant_id: tenantId },
-    { name: 'Worship & Media', type: 'expense', description: 'A/V equipment, streaming, supplies', tenant_id: tenantId },
-    { name: 'Office & Administration', type: 'expense', description: 'Supplies, postage, software', tenant_id: tenantId },
-    { name: 'Insurance', type: 'expense', description: 'Property, liability insurance', tenant_id: tenantId },
-    { name: 'Mortgage / Rent', type: 'expense', description: 'Building payments', tenant_id: tenantId },
-  ];
+  const { CHURCH_CATEGORIES } = require('../utils/defaultCategories');
+  const categories = CHURCH_CATEGORIES.map((c) => ({
+    name: c.name,
+    type: c.type,
+    description: c.description,
+    sort_order: c.sort_order,
+    tenant_id: tenantId,
+  }));
   await db('categories').insert(categories);
 
   await db('funds').insert([

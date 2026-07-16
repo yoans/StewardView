@@ -5,6 +5,10 @@ const { authenticate, authorize } = require('../middleware/auth');
 const { requireTenant } = require('../middleware/tenant');
 const { logAudit } = require('../models/auditLog');
 const { getGeneralFund, postFundAdjustment } = require('../utils/fundBank');
+const {
+  GIVELIFY_GENERAL_INCOME_NAMES,
+  GIVELIFY_DIRECTED_INCOME_NAMES,
+} = require('../utils/defaultCategories');
 
 // ── Givelify Envelope → Fund mapping rules ──────────────
 const DEFAULT_ENVELOPE_MAP = {
@@ -213,17 +217,21 @@ async function mapEnvelopeToFund(envelope, tenantId) {
 }
 
 async function resolveIncomeCategoryId(fund, tenantId, trx = db) {
-  const preferred = fund.name === 'General Fund' || !fund.is_restricted
-    ? 'Tithes & Offerings'
-    : 'Directed Contributions';
-  const fallback = preferred === 'Tithes & Offerings' ? 'Directed Contributions' : 'Tithes & Offerings';
+  const names = (fund.name === 'General Fund' || !fund.is_restricted)
+    ? GIVELIFY_GENERAL_INCOME_NAMES
+    : GIVELIFY_DIRECTED_INCOME_NAMES;
 
-  let cat = await trx('categories').where({ name: preferred, type: 'income', tenant_id: tenantId }).first();
-  if (cat) return cat.id;
-  cat = await trx('categories').where({ name: fallback, type: 'income', tenant_id: tenantId }).first();
-  if (cat) return cat.id;
-  cat = await trx('categories').where({ type: 'income', tenant_id: tenantId }).orderBy('id').first();
-  return cat ? cat.id : null;
+  for (const name of names) {
+    const cat = await trx('categories')
+      .where({ name, type: 'income', tenant_id: tenantId, is_active: true })
+      .first();
+    if (cat) return cat.id;
+  }
+  const any = await trx('categories')
+    .where({ type: 'income', tenant_id: tenantId, is_active: true })
+    .orderBy('sort_order')
+    .first();
+  return any ? any.id : null;
 }
 
 /** StewardView does not store donor identity — keep that in Givelify. */

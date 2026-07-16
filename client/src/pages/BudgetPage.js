@@ -18,10 +18,11 @@ export default function BudgetPage({ user }) {
   const [allBudgets, setAllBudgets] = useState([]);
   const [categories, setCategories] = useState([]);
   const [editEpoch, setEditEpoch] = useState(0);
-  const [view, setView] = useState('monthly'); // 'monthly' | 'ytd' | 'edit'
+  const [view, setView] = useState('monthly'); // 'monthly' | 'ytd' | 'edit' | 'categories'
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [draftNotes, setDraftNotes] = useState(null);
 
   const canEdit = ['admin', 'treasurer'].includes(user?.role);
   const yearOptions = useMemo(() => {
@@ -61,12 +62,22 @@ export default function BudgetPage({ user }) {
     setLoading(false);
   };
 
+  const loadCategories = async () => {
+    setLoading(true);
+    try {
+      const res = await categoriesAPI.list({ include_inactive: '1' });
+      setCategories(res.data);
+    } catch (err) { console.error(err); }
+    setLoading(false);
+  };
+
   useEffect(() => {
     setError('');
     setSuccess('');
     if (view === 'monthly') loadMonthly();
     else if (view === 'ytd') loadYTD();
     else if (view === 'edit') loadEditData();
+    else if (view === 'categories') loadCategories();
   }, [year, month, view]);
 
   const handleUpsertAmount = async (categoryId, amount) => {
@@ -129,7 +140,30 @@ export default function BudgetPage({ user }) {
     }
   };
 
-  const title = view === 'edit' ? 'Build Budget' : view === 'ytd' ? 'Budget Year-to-Date' : 'Budget vs. Actual';
+  const handleApplyDraft = async () => {
+    if (!window.confirm(
+      `Apply the first-draft monthly budget to ${MONTHS[month]} ${year}?\n\n` +
+      `This replaces existing lines for that month.\n` +
+      `Offering is estimated from two July Sundays × 4; expenses use July actuals.`
+    )) return;
+    setError(''); setSuccess('');
+    try {
+      const res = await budgetsAPI.applyDraft({ year, month, replace: true });
+      setDraftNotes(res.data?.notes || null);
+      setSuccess(res.data?.message || 'Draft budget applied');
+      await loadEditData();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to apply draft budget');
+    }
+  };
+
+  const title = view === 'edit'
+    ? 'Build Budget'
+    : view === 'ytd'
+      ? 'Budget Year-to-Date'
+      : view === 'categories'
+        ? 'Budget Categories'
+        : 'Budget vs. Actual';
 
   return (
     <div>
@@ -139,35 +173,49 @@ export default function BudgetPage({ user }) {
           {view === 'edit' && (
             <p className="text-sm text-gray-500 mt-1">Set planned income and expenses for the month. Amounts save when you leave a field.</p>
           )}
+          {view === 'categories' && (
+            <p className="text-sm text-gray-500 mt-1">Add, rename, or deactivate lines used by budgets and transactions.</p>
+          )}
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2 flex-wrap">
           <button className={view === 'monthly' ? 'btn-primary text-sm' : 'btn-secondary text-sm'} onClick={() => setView('monthly')}>Monthly</button>
           <button className={view === 'ytd' ? 'btn-primary text-sm' : 'btn-secondary text-sm'} onClick={() => setView('ytd')}>Year-to-Date</button>
           {canEdit && <button className={view === 'edit' ? 'btn-primary text-sm' : 'btn-secondary text-sm'} onClick={() => setView('edit')}>Build Budget</button>}
+          {canEdit && <button className={view === 'categories' ? 'btn-primary text-sm' : 'btn-secondary text-sm'} onClick={() => setView('categories')}>Categories</button>}
         </div>
       </div>
 
       {error && <div className="bg-red-50 text-red-700 p-3 rounded-lg text-sm mb-4">{error}</div>}
       {success && <div className="bg-green-50 text-green-700 p-3 rounded-lg text-sm mb-4">{success}</div>}
+      {draftNotes && view === 'edit' && (
+        <div className="bg-blue-50 text-blue-900 p-3 rounded-lg text-sm mb-4 space-y-1">
+          <p className="font-medium">Draft assumptions</p>
+          <p>{draftNotes.offering}</p>
+          <p>{draftNotes.expenses}</p>
+          <p>{draftNotes.online}</p>
+        </div>
+      )}
 
-      <div className="card mb-6">
-        <div className="flex flex-wrap gap-4 items-end">
-          <div>
-            <label className="label">Year</label>
-            <select className="input w-32" value={year} onChange={e => setYear(parseInt(e.target.value))}>
-              {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
-            </select>
-          </div>
-          {(view === 'monthly' || view === 'edit') && (
+      {view !== 'categories' && (
+        <div className="card mb-6">
+          <div className="flex flex-wrap gap-4 items-end">
             <div>
-              <label className="label">Month</label>
-              <select className="input w-40" value={month} onChange={e => setMonth(parseInt(e.target.value))}>
-                {MONTHS.slice(1).map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
+              <label className="label">Year</label>
+              <select className="input w-32" value={year} onChange={e => setYear(parseInt(e.target.value))}>
+                {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
               </select>
             </div>
-          )}
+            {(view === 'monthly' || view === 'edit') && (
+              <div>
+                <label className="label">Month</label>
+                <select className="input w-40" value={month} onChange={e => setMonth(parseInt(e.target.value))}>
+                  {MONTHS.slice(1).map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
+                </select>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {loading ? (
         <p className="text-center py-8 text-gray-500">Loading...</p>
@@ -178,28 +226,44 @@ export default function BudgetPage({ user }) {
       ) : view === 'edit' ? (
         <EditView
           budgets={allBudgets.filter(b => b.month === month)}
-          categories={categories}
+          categories={categories.filter(c => c.is_active !== false)}
           year={year}
           month={month}
           editEpoch={editEpoch}
           onUpsert={handleUpsertAmount}
           onDelete={handleBudgetDelete}
           onCopyPrevious={handleCopyPrevious}
+          onApplyDraft={handleApplyDraft}
+        />
+      ) : view === 'categories' ? (
+        <CategoriesView
+          categories={categories}
+          onChanged={async (msg) => {
+            setSuccess(msg || 'Saved');
+            await loadCategories();
+          }}
+          onError={(msg) => setError(msg)}
         />
       ) : null}
     </div>
   );
 }
 
-function EditView({ budgets, categories, year, month, editEpoch, onUpsert, onDelete, onCopyPrevious }) {
+function EditView({ budgets, categories, year, month, editEpoch, onUpsert, onDelete, onCopyPrevious, onApplyDraft }) {
   const budgetByCategory = useMemo(() => {
     const map = {};
     budgets.forEach(b => { map[b.category_id] = b; });
     return map;
   }, [budgets]);
 
-  const incomeCats = categories.filter(c => c.type === 'income').sort((a, b) => a.name.localeCompare(b.name));
-  const expenseCats = categories.filter(c => c.type === 'expense').sort((a, b) => a.name.localeCompare(b.name));
+  const sortCats = (list) => [...list].sort((a, b) => {
+    const ao = a.sort_order ?? 0;
+    const bo = b.sort_order ?? 0;
+    if (ao !== bo) return ao - bo;
+    return a.name.localeCompare(b.name);
+  });
+  const incomeCats = sortCats(categories.filter(c => c.type === 'income'));
+  const expenseCats = sortCats(categories.filter(c => c.type === 'expense'));
 
   const [drafts, setDrafts] = useState({});
   const [savingId, setSavingId] = useState(null);
@@ -272,7 +336,7 @@ function EditView({ budgets, categories, year, month, editEpoch, onUpsert, onDel
       </div>
       <div className="border border-t-0 border-gray-200 rounded-b-lg divide-y">
         {cats.length === 0 ? (
-          <p className="px-3 py-4 text-sm text-gray-400">No {tone} categories yet. Add categories in Admin first.</p>
+          <p className="px-3 py-4 text-sm text-gray-400">No {tone} categories yet. Use the Categories tab to add them.</p>
         ) : cats.map(c => {
           const existing = budgetByCategory[c.id];
           const isSaving = savingId === c.id;
@@ -338,9 +402,14 @@ function EditView({ budgets, categories, year, month, editEpoch, onUpsert, onDel
                 : `${linesSet} categor${linesSet === 1 ? 'y' : 'ies'} budgeted`}
             </p>
           </div>
-          <button type="button" className="btn-secondary text-sm" onClick={onCopyPrevious}>
-            Copy previous month
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className="btn-secondary text-sm" onClick={onApplyDraft}>
+              Apply July draft
+            </button>
+            <button type="button" className="btn-secondary text-sm" onClick={onCopyPrevious}>
+              Copy previous month
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
@@ -364,6 +433,188 @@ function EditView({ budgets, categories, year, month, editEpoch, onUpsert, onDel
           <>
             {renderSection('Income', incomeCats, 'income')}
             {renderSection('Expenses', expenseCats, 'expense')}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CategoriesView({ categories, onChanged, onError }) {
+  const [form, setForm] = useState({ name: '', type: 'expense', description: '', sort_order: '' });
+  const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({ name: '', description: '', sort_order: '' });
+
+  const sortCats = (list) => [...list].sort((a, b) => {
+    const ao = a.sort_order ?? 0;
+    const bo = b.sort_order ?? 0;
+    if (ao !== bo) return ao - bo;
+    return a.name.localeCompare(b.name);
+  });
+  const active = sortCats(categories.filter((c) => c.is_active !== false));
+  const inactive = sortCats(categories.filter((c) => c.is_active === false));
+
+  const handleCreate = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await categoriesAPI.create({
+        name: form.name.trim(),
+        type: form.type,
+        description: form.description.trim() || null,
+        sort_order: form.sort_order === '' ? 0 : parseInt(form.sort_order, 10),
+      });
+      setForm({ name: '', type: 'expense', description: '', sort_order: '' });
+      await onChanged('Category created');
+    } catch (err) {
+      onError(err.response?.data?.error || 'Failed to create category');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const startEdit = (cat) => {
+    setEditingId(cat.id);
+    setEditForm({
+      name: cat.name,
+      description: cat.description || '',
+      sort_order: String(cat.sort_order ?? 0),
+    });
+  };
+
+  const saveEdit = async (cat) => {
+    setSaving(true);
+    try {
+      await categoriesAPI.update(cat.id, {
+        name: editForm.name.trim(),
+        description: editForm.description.trim() || null,
+        sort_order: editForm.sort_order === '' ? 0 : parseInt(editForm.sort_order, 10),
+      });
+      setEditingId(null);
+      await onChanged('Category updated');
+    } catch (err) {
+      onError(err.response?.data?.error || 'Failed to update category');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deactivate = async (cat) => {
+    if (!window.confirm(`Deactivate “${cat.name}”? Existing transactions keep the history; it won’t appear on new budgets.`)) return;
+    try {
+      await categoriesAPI.remove(cat.id);
+      await onChanged('Category deactivated');
+    } catch (err) {
+      onError(err.response?.data?.error || 'Failed to deactivate');
+    }
+  };
+
+  const reactivate = async (cat) => {
+    try {
+      await categoriesAPI.update(cat.id, { is_active: true });
+      await onChanged('Category reactivated');
+    } catch (err) {
+      onError(err.response?.data?.error || 'Failed to reactivate');
+    }
+  };
+
+  const ensureDefaults = async () => {
+    try {
+      const res = await categoriesAPI.ensureDefaults();
+      await onChanged(
+        `Workbook categories ready (${res.data.added || 0} added, ${res.data.reactivated || 0} reactivated)`
+      );
+    } catch (err) {
+      onError(err.response?.data?.error || 'Failed to ensure defaults');
+    }
+  };
+
+  const renderList = (list, inactiveList = false) => (
+    <div className="border border-gray-200 rounded-lg divide-y">
+      {list.length === 0 ? (
+        <p className="px-3 py-4 text-sm text-gray-400">None</p>
+      ) : list.map((c) => (
+        <div key={c.id} className="px-3 py-2.5 flex flex-wrap items-center gap-3 hover:bg-gray-50">
+          {editingId === c.id ? (
+            <>
+              <input className="input flex-1 min-w-[10rem] py-1 text-sm" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+              <input className="input flex-1 min-w-[10rem] py-1 text-sm" placeholder="Description" value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
+              <input className="input w-20 py-1 text-sm" type="number" title="Sort order" value={editForm.sort_order} onChange={(e) => setEditForm({ ...editForm, sort_order: e.target.value })} />
+              <button type="button" className="btn-primary text-xs" disabled={saving} onClick={() => saveEdit(c)}>Save</button>
+              <button type="button" className="btn-secondary text-xs" onClick={() => setEditingId(null)}>Cancel</button>
+            </>
+          ) : (
+            <>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900">{c.name}</p>
+                <p className="text-xs text-gray-500">{c.description || c.type}</p>
+              </div>
+              <span className={`text-xs px-2 py-0.5 rounded ${c.type === 'income' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{c.type}</span>
+              {!inactiveList ? (
+                <>
+                  <button type="button" className="text-xs text-blue-600 hover:text-blue-800" onClick={() => startEdit(c)}>Edit</button>
+                  <button type="button" className="text-xs text-red-500 hover:text-red-700" onClick={() => deactivate(c)}>Deactivate</button>
+                </>
+              ) : (
+                <button type="button" className="text-xs text-blue-600 hover:text-blue-800" onClick={() => reactivate(c)}>Reactivate</button>
+              )}
+            </>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      <div className="card">
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+          <div>
+            <h3 className="text-lg font-bold text-gray-900">Manage categories</h3>
+            <p className="text-sm text-gray-500 mt-1">
+              These are the lines used in Build Budget and when categorizing transactions.
+            </p>
+          </div>
+          <button type="button" className="btn-secondary text-sm" onClick={ensureDefaults}>
+            Ensure workbook defaults
+          </button>
+        </div>
+
+        <form onSubmit={handleCreate} className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-6">
+          <div className="md:col-span-2">
+            <label className="label">Name</label>
+            <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required placeholder="e.g. Grounds" />
+          </div>
+          <div>
+            <label className="label">Type</label>
+            <select className="input" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+              <option value="income">Income</option>
+              <option value="expense">Expense</option>
+            </select>
+          </div>
+          <div>
+            <label className="label">Sort</label>
+            <input className="input" type="number" value={form.sort_order} onChange={(e) => setForm({ ...form, sort_order: e.target.value })} placeholder="0" />
+          </div>
+          <div className="flex items-end">
+            <button type="submit" className="btn-primary w-full" disabled={saving || !form.name.trim()}>Add</button>
+          </div>
+          <div className="md:col-span-5">
+            <label className="label">Description (optional)</label>
+            <input className="input" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+          </div>
+        </form>
+
+        <h4 className="text-sm font-bold text-green-800 mb-2">Income</h4>
+        {renderList(active.filter((c) => c.type === 'income'))}
+        <h4 className="text-sm font-bold text-red-800 mt-4 mb-2">Expenses</h4>
+        {renderList(active.filter((c) => c.type === 'expense'))}
+
+        {inactive.length > 0 && (
+          <>
+            <h4 className="text-sm font-bold text-gray-600 mt-6 mb-2">Inactive</h4>
+            {renderList(inactive, true)}
           </>
         )}
       </div>

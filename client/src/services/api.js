@@ -83,6 +83,7 @@ export const budgetsAPI = {
   update: (id, data) => api.put(`/budgets/${id}`, data),
   delete: (id) => api.delete(`/budgets/${id}`),
   copy: (data) => api.post('/budgets/copy', data),
+  applyDraft: (data) => api.post('/budgets/apply-draft', data),
   ytd: (year) => api.get('/budgets/ytd', { params: { year } }),
 };
 
@@ -113,7 +114,11 @@ export const auditAPI = {
 
 // ── Categories ───────────────────────────────────────────
 export const categoriesAPI = {
-  list: (type) => api.get('/categories', { params: { type } }),
+  list: (params) => api.get('/categories', { params: typeof params === 'string' ? { type: params } : params }),
+  create: (data) => api.post('/categories', data),
+  update: (id, data) => api.put(`/categories/${id}`, data),
+  remove: (id) => api.delete(`/categories/${id}`),
+  ensureDefaults: () => api.post('/categories/ensure-defaults'),
 };
 
 // ── Givelify ─────────────────────────────────────────────
