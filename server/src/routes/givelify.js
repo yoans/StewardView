@@ -371,8 +371,16 @@ function localMonthStart() {
 router.get('/', authenticate, requireTenant, async (req, res) => {
   try {
     const { status, start_date, end_date } = req.query;
-    const limit = Math.min(Math.max(parseInt(req.query.limit) || 100, 1), 500);
+    const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 100);
     const offset = Math.max(parseInt(req.query.offset) || 0, 0);
+
+    let countQuery = db('givelify_contributions').where('tenant_id', req.tenantId);
+    if (status) countQuery = countQuery.where('status', status);
+    if (start_date) countQuery = countQuery.where('date', '>=', start_date);
+    if (end_date) countQuery = countQuery.where('date', '<=', end_date);
+    const countRow = await countQuery.count('* as count').first();
+    const total = parseInt(countRow?.count) || 0;
+
     let query = db('givelify_contributions')
       .leftJoin('funds', 'givelify_contributions.fund_id', 'funds.id')
       .select(
@@ -397,8 +405,8 @@ router.get('/', authenticate, requireTenant, async (req, res) => {
     if (status) query = query.where('givelify_contributions.status', status);
     if (start_date) query = query.where('givelify_contributions.date', '>=', start_date);
     if (end_date) query = query.where('givelify_contributions.date', '<=', end_date);
-    const rows = await query;
-    res.json(rows);
+    const contributions = await query;
+    res.json({ contributions, total, limit, offset });
   } catch (err) {
     console.error('Givelify list error:', err);
     res.status(500).json({ error: 'Server error' });
@@ -451,6 +459,7 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
       imported: 0,
       skipped: 0,
       auto_earmarked: 0,
+      defaulted_general: 0,
       pending: 0,
       fees_posted: 0,
       fee_total: 0,
@@ -498,7 +507,12 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
           }
         }
 
-        const fund = await mapEnvelopeToFund(c.envelope, req.tenantId);
+        let fund = await mapEnvelopeToFund(c.envelope, req.tenantId);
+        let usedGeneralDefault = false;
+        if (!fund) {
+          fund = await getGeneralFund(req.tenantId);
+          usedGeneralDefault = !!fund;
+        }
         const safeRaw = sanitizeImportRaw(c.raw || {
           amount: c.amount,
           fee: c.fee,
@@ -543,9 +557,12 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
               userId: req.user.id,
               tenantId: req.tenantId,
               trx,
-              notePrefix: 'Auto-imported from Givelify',
+              notePrefix: usedGeneralDefault
+                ? 'Auto-imported from Givelify (defaulted to General Fund)'
+                : 'Auto-imported from Givelify',
             });
             results.auto_earmarked++;
+            if (usedGeneralDefault) results.defaulted_general = (results.defaulted_general || 0) + 1;
             if (posted.feeFundTxnId) {
               results.fees_posted++;
               results.fee_total = Math.round((results.fee_total + fee) * 100) / 100;

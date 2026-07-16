@@ -38,8 +38,9 @@ export default function AuditPage() {
 
       <div className="card mb-4 bg-blue-50 border border-blue-200">
         <p className="text-sm text-blue-800">
-          <strong>Full Traceability:</strong> Imports, exports/downloads, transaction changes, budgets, funds, users, and reports are recorded here with who did it and what changed.
-          This log is append-only and cannot be modified or deleted.
+          Imports, exports/downloads, transaction changes, budgets, funds, users, and reports are recorded here with who did it and what changed.
+          This is an application change log — useful for accountability, not a cryptographic proof chain.
+          Entries are not hash-linked; treat it as operational history, not an immutable evidence vault.
         </p>
       </div>
 

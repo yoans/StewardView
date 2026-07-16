@@ -3,9 +3,12 @@ import { givelifyAPI, fundsAPI } from '../services/api';
 import { formatDate } from '../utils/format';
 
 const fmt = (n) => parseFloat(n || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+const PAGE_SIZE = 50;
 
 export default function GivelifyPage({ user }) {
   const [contributions, setContributions] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
   const [funds, setFunds] = useState([]);
   const [summary, setSummary] = useState(null);
   const [tab, setTab] = useState('list'); // 'list' | 'import' | 'settings'
@@ -25,16 +28,20 @@ export default function GivelifyPage({ user }) {
   const [newFundName, setNewFundName] = useState('');
 
   const canEdit = ['admin', 'treasurer'].includes(user?.role);
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  const loadData = async () => {
+  const loadData = async (pageIndex = page) => {
     setLoading(true);
     try {
+      const offset = pageIndex * PAGE_SIZE;
       const [contribRes, fundsRes, summRes] = await Promise.all([
-        givelifyAPI.list({ limit: 500 }),
+        givelifyAPI.list({ limit: PAGE_SIZE, offset }),
         fundsAPI.list(),
         givelifyAPI.summary(),
       ]);
-      setContributions(contribRes.data);
+      const payload = contribRes.data;
+      setContributions(Array.isArray(payload) ? payload : (payload.contributions || []));
+      setTotal(Array.isArray(payload) ? payload.length : (payload.total || 0));
       setFunds(fundsRes.data);
       setSummary(summRes.data);
     } catch { /* ignore */ }
@@ -48,7 +55,11 @@ export default function GivelifyPage({ user }) {
     } catch { /* ignore */ }
   };
 
-  useEffect(() => { loadData(); loadEnvelopeMap(); }, []);
+  useEffect(() => { loadEnvelopeMap(); }, []);
+
+  useEffect(() => {
+    if (tab === 'list') loadData(page);
+  }, [page, tab]);
 
   const handleFileSelect = (e) => {
     const file = e.target.files?.[0];
@@ -73,10 +84,14 @@ export default function GivelifyPage({ user }) {
     try {
       const res = await givelifyAPI.import(csvText);
       setImportResult(res.data);
-      const pendingNote = res.data.pending ? `, ${res.data.pending} need manual earmark` : '';
-      setSuccess(`Imported ${res.data.imported} contributions (${res.data.auto_earmarked} auto-earmarked${pendingNote})`);
+      const defaulted = res.data.defaulted_general
+        ? `, ${res.data.defaulted_general} defaulted to General Fund`
+        : '';
+      const pendingNote = res.data.pending ? `, ${res.data.pending} still need a fund` : '';
+      setSuccess(`Imported ${res.data.imported} contributions (${res.data.auto_earmarked} assigned to funds${defaulted}${pendingNote})`);
       setCsvText('');
-      loadData();
+      setPage(0);
+      loadData(0);
     } catch (err) {
       setError(err.response?.data?.error || 'Import failed');
     } finally {
@@ -84,14 +99,14 @@ export default function GivelifyPage({ user }) {
     }
   };
 
-  const handleManualEarmark = async (contribId, fundId) => {
+  const handleManualAssign = async (contribId, fundId) => {
     setError(''); setSuccess('');
     try {
       await givelifyAPI.earmark(contribId, fundId);
-      setSuccess('Contribution earmarked successfully — it will count toward budget actuals');
-      loadData();
+      setSuccess('Contribution assigned to fund — it will count toward budget actuals');
+      loadData(page);
     } catch (err) {
-      setError(err.response?.data?.error || 'Earmark failed');
+      setError(err.response?.data?.error || 'Assign failed');
     }
   };
 
@@ -120,12 +135,15 @@ export default function GivelifyPage({ user }) {
     setEnvelopeMap(updated);
   };
 
+  const fromRow = total === 0 ? 0 : page * PAGE_SIZE + 1;
+  const toRow = Math.min(total, (page + 1) * PAGE_SIZE);
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Givelify Contributions</h2>
-          <p className="text-gray-500 text-sm">Import giving CSV exports and auto-earmark to funds (feeds budget actuals)</p>
+          <p className="text-gray-500 text-sm">Import giving CSV exports and assign to funds (feeds budget actuals)</p>
         </div>
         <div className="flex gap-2">
           <button className={tab === 'list' ? 'btn-primary text-sm' : 'btn-secondary text-sm'} onClick={() => setTab('list')}>Contributions</button>
@@ -137,7 +155,6 @@ export default function GivelifyPage({ user }) {
       {error && <div className="bg-red-50 text-red-700 p-3 rounded-lg text-sm mb-4">{error}</div>}
       {success && <div className="bg-green-50 text-green-700 p-3 rounded-lg text-sm mb-4">{success}</div>}
 
-      {/* Summary Cards */}
       {summary && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div className="card bg-green-50 border border-green-200">
@@ -149,17 +166,41 @@ export default function GivelifyPage({ user }) {
             <p className="text-xl font-bold text-blue-700">{fmt(summary.total_this_month)}</p>
           </div>
           <div className="card bg-yellow-50 border border-yellow-200">
-            <p className="text-sm text-yellow-700">Pending Earmark</p>
+            <p className="text-sm text-yellow-700">Needs fund</p>
             <p className="text-xl font-bold text-yellow-700">{summary.pending_count}</p>
+            <p className="text-xs text-yellow-700 mt-1">Unmapped only — most gifts default to General Fund</p>
           </div>
         </div>
       )}
 
       {loading ? <p className="text-center py-8 text-gray-500">Loading...</p> : (
         <>
-          {/* List Tab */}
           {tab === 'list' && (
             <div className="card overflow-x-auto">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3 text-sm text-gray-600">
+                <p>
+                  {total === 0 ? 'No contributions' : `Showing ${fromRow}–${toRow} of ${total}`}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className="btn-secondary text-xs"
+                    disabled={page <= 0}
+                    onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  >
+                    Previous
+                  </button>
+                  <span className="self-center text-xs text-gray-500">Page {page + 1} of {pageCount}</span>
+                  <button
+                    type="button"
+                    className="btn-secondary text-xs"
+                    disabled={(page + 1) * PAGE_SIZE >= total}
+                    onClick={() => setPage((p) => p + 1)}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-gray-500 border-b">
@@ -185,7 +226,7 @@ export default function GivelifyPage({ user }) {
                       <td className="py-2">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                           c.status === 'imported' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                        }`}>{c.status}</span>
+                        }`}>{c.status === 'pending' ? 'needs fund' : c.status}</span>
                       </td>
                       {canEdit && (
                         <td className="py-2">
@@ -193,9 +234,9 @@ export default function GivelifyPage({ user }) {
                             <select
                               className="input text-xs py-1 px-2"
                               defaultValue=""
-                              onChange={(e) => { if (e.target.value) handleManualEarmark(c.id, parseInt(e.target.value)); }}
+                              onChange={(e) => { if (e.target.value) handleManualAssign(c.id, parseInt(e.target.value)); }}
                             >
-                              <option value="">Earmark to...</option>
+                              <option value="">Assign fund…</option>
                               {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                             </select>
                           )}
@@ -208,14 +249,13 @@ export default function GivelifyPage({ user }) {
             </div>
           )}
 
-          {/* Import Tab */}
           {tab === 'import' && canEdit && (
             <div className="card max-w-3xl">
               <h3 className="text-lg font-bold mb-2">Import from Givelify CSV</h3>
               <p className="text-sm text-gray-500 mb-4">
                 Export the Donations report from Givelify (CSV), then upload the file or paste it below.
-                Envelopes/campaigns are matched to your funds. <strong>Donor names and emails are not stored</strong> —
-                keep individual giver records in Givelify. Re-importing also clears any previously stored donor details.
+                Envelopes/campaigns are matched to your funds. Unmatched gifts default to the <strong>General Fund</strong>.
+                <strong> Donor names and emails are not stored</strong> — keep individual giver records in Givelify.
               </p>
               <div className="mb-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
                 <p>
@@ -258,14 +298,17 @@ export default function GivelifyPage({ user }) {
                 <div className="mt-4 p-4 bg-gray-50 rounded-lg text-sm space-y-1">
                   <p className="font-medium">Import Results:</p>
                   <p className="text-green-700">Imported: {importResult.imported}</p>
-                  <p className="text-blue-700">Auto-earmarked: {importResult.auto_earmarked}</p>
+                  <p className="text-blue-700">Assigned to funds: {importResult.auto_earmarked}</p>
+                  {importResult.defaulted_general > 0 && (
+                    <p className="text-blue-700">Defaulted to General Fund: {importResult.defaulted_general}</p>
+                  )}
                   {importResult.fees_posted > 0 && (
                     <p className="text-orange-700">
                       Fees to General Fund: {importResult.fees_posted} ({fmt(importResult.fee_total)})
                     </p>
                   )}
                   {importResult.pending > 0 && (
-                    <p className="text-yellow-700">Pending earmark: {importResult.pending}</p>
+                    <p className="text-yellow-700">Still need a fund: {importResult.pending}</p>
                   )}
                   <p className="text-gray-500">Skipped (duplicates): {importResult.skipped}</p>
                   {importResult.errors?.length > 0 && (
@@ -286,13 +329,13 @@ export default function GivelifyPage({ user }) {
             </div>
           )}
 
-          {/* Settings Tab */}
           {tab === 'settings' && canEdit && (
             <div className="card max-w-2xl">
               <h3 className="text-lg font-bold mb-2">Envelope → Fund Mapping</h3>
               <p className="text-sm text-gray-500 mb-4">
                 Configure how Givelify envelope / campaign names map to your church funds.
                 Matching is case-insensitive and allows partial matches (e.g. &quot;missions&quot; matches &quot;Missions - March&quot;).
+                Anything unmatched defaults to General Fund on import.
               </p>
 
               <div className="space-y-2 mb-4">

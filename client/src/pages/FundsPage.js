@@ -132,6 +132,11 @@ export default function FundsPage({ user }) {
 
       <FundsVsBankBanner recon={fundsVsBank} />
 
+      <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        When money leaves a fund that donors gave for a specific purpose, communicate that clearly
+        (to leadership and, when appropriate, to donors). Keep purpose-specific gifts aligned with intent.
+      </div>
+
       {/* Create Fund Form */}
       {showCreate && (
         <div className="card mb-6">
@@ -151,7 +156,7 @@ export default function FundsPage({ user }) {
             </div>
             <div className="flex items-center space-x-2 pt-6">
               <input type="checkbox" checked={form.is_restricted} onChange={e => setForm({...form, is_restricted: e.target.checked})} />
-              <label className="text-sm text-gray-700">Donor-designated fund</label>
+              <label className="text-sm text-gray-700">Purpose-specific fund (e.g. missions, building)</label>
             </div>
             <div className="flex items-end">
               <button type="submit" className="btn-primary">Create Fund</button>
@@ -244,9 +249,6 @@ export default function FundsPage({ user }) {
                 <div>
                   <h4 className="font-bold text-gray-900">{fund.name}</h4>
                   <p className="text-xs text-gray-500">{fund.description}</p>
-                  {fund.is_restricted && (
-                    <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded mt-1 inline-block">Donor designated</span>
-                  )}
                 </div>
                 <p className="text-lg font-bold text-green-700">{fmt(fund.current_balance)}</p>
               </div>

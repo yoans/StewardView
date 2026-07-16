@@ -53,7 +53,6 @@ export default function DashboardPage({ tenant }) {
             </div>
           </div>
           <div className="text-sm text-gray-600 md:text-right space-y-1">
-            {tenant.contact_email && <p>{tenant.contact_email}</p>}
             {tenant.phone && <p>{tenant.phone}</p>}
             {tenant.website && <p>{tenant.website}</p>}
           </div>
@@ -147,7 +146,6 @@ export default function DashboardPage({ tenant }) {
                   <div>
                     <p className="font-medium text-gray-900">
                       {fund.name}
-                      {fund.is_restricted ? <span className="ml-2 text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">Donor designated</span> : null}
                     </p>
                     <p className="text-xs text-gray-500">{fund.description}</p>
                   </div>

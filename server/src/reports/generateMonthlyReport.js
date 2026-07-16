@@ -82,9 +82,8 @@ async function generateMonthlyReportPDF(data, outputPath) {
     sectionHeader(doc, 'Earmarked Fund Balances');
     data.funds.forEach(fund => {
       const targetStr = fund.target_amount ? ` (Goal: $${fmtNum(fund.target_amount)})` : '';
-      const designated = fund.is_restricted ? ' [Donor designated]' : '';
       doc.fontSize(10).fillColor(darkGray)
-        .text(`${fund.name}${designated}${targetStr}`, 72, doc.y, { continued: true })
+        .text(`${fund.name}${targetStr}`, 72, doc.y, { continued: true })
         .text(`$${fmtNum(fund.current_balance)}`, { align: 'right' });
     });
     doc.moveDown(1);

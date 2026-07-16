@@ -12,6 +12,7 @@ export default function ReportsPage({ user }) {
   const [pastReports, setPastReports] = useState([]);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState('');
   const canGenerate = ['admin', 'treasurer'].includes(user.role);
 
   useEffect(() => {
@@ -20,29 +21,38 @@ export default function ReportsPage({ user }) {
 
   const loadReport = async () => {
     setLoading(true);
+    setError('');
     try {
       const res = await reportsAPI.monthly(year, month);
       setReport(res.data);
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+      setReport(null);
+      setError(err.response?.data?.error || 'Could not load report');
+    }
     setLoading(false);
   };
 
   const generatePDF = async () => {
     setGenerating(true);
+    setError('');
     try {
       await reportsAPI.generate(year, month);
       alert(`PDF report generated for ${MONTHS[month]} ${year}!`);
       const res = await reportsAPI.list();
       setPastReports(res.data);
     } catch (err) {
-      alert('Failed to generate PDF');
+      setError(err.response?.data?.error || 'Failed to generate PDF');
     }
     setGenerating(false);
   };
 
   return (
     <div>
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">Monthly Reports</h2>
+      <h2 className="text-2xl font-bold text-gray-900 mb-2">Monthly Reports</h2>
+      <p className="text-sm text-gray-500 mb-6">
+        Preview month totals for leadership review. PDF export is the distribute-ready snapshot — polish for sharing will come next.
+      </p>
 
       {/* Period Selector */}
       <div className="card mb-6">
@@ -68,6 +78,7 @@ export default function ReportsPage({ user }) {
             </button>
           )}
         </div>
+        {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
       </div>
 
       {/* Report Display */}
@@ -138,7 +149,6 @@ export default function ReportsPage({ user }) {
               <div key={fund.id} className="flex justify-between py-2 border-b last:border-0">
                 <span className="text-gray-700">
                   {fund.name}
-                  {fund.is_restricted && <span className="ml-2 text-xs bg-orange-100 text-orange-700 px-1 py-0.5 rounded">Donor designated</span>}
                 </span>
                 <span className="font-medium text-green-700">{fmt(fund.current_balance)}</span>
               </div>

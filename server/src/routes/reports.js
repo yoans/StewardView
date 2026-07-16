@@ -226,19 +226,43 @@ router.get('/dashboard', authenticate, requireTenant, async (req, res) => {
 });
 
 // ── Helper: build monthly report data ───────────────────
-async function buildMonthlyReportData(year, month) {
+async function buildMonthlyReportData(year, month, tenantId, tenantName = 'StewardView') {
   const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
   const endDate = new Date(year, month, 0).toISOString().slice(0, 10);
   const monthName = new Date(year, month - 1).toLocaleString('default', { month: 'long' });
 
-  // Bank balances
-  const bankAccounts = await db('bank_accounts').where({ is_active: true });
+  // Bank balances (calculated from opening + bank-linked transactions)
+  const bankAccountsRaw = await db('bank_accounts').where({ is_active: true, tenant_id: tenantId });
+  const bankAccounts = [];
+  for (const acc of bankAccountsRaw) {
+    const opening = parseFloat(acc.opening_balance != null ? acc.opening_balance : acc.current_balance) || 0;
+    const incomeRow = await db('transactions')
+      .where({ tenant_id: tenantId, bank_account_id: acc.id, type: 'income' })
+      .where('status', '!=', 'void')
+      .sum('amount as total')
+      .first();
+    const expenseRow = await db('transactions')
+      .where({ tenant_id: tenantId, bank_account_id: acc.id, type: 'expense' })
+      .where('status', '!=', 'void')
+      .sum('amount as total')
+      .first();
+    const income = parseFloat(incomeRow?.total) || 0;
+    const expense = parseFloat(expenseRow?.total) || 0;
+    const calculated = Math.round((opening + income - expense) * 100) / 100;
+    bankAccounts.push({
+      ...acc,
+      opening_balance: opening,
+      calculated_balance: calculated,
+      current_balance: calculated,
+    });
+  }
 
   // Income by category
   const incomeByCategory = await db('transactions')
     .leftJoin('categories', 'transactions.category_id', 'categories.id')
     .where('transactions.type', 'income')
     .where('transactions.status', '!=', 'void')
+    .where('transactions.tenant_id', tenantId)
     .whereBetween('transactions.date', [startDate, endDate])
     .groupBy('categories.name')
     .select('categories.name as category')
@@ -249,25 +273,28 @@ async function buildMonthlyReportData(year, month) {
     .leftJoin('categories', 'transactions.category_id', 'categories.id')
     .where('transactions.type', 'expense')
     .where('transactions.status', '!=', 'void')
+    .where('transactions.tenant_id', tenantId)
     .whereBetween('transactions.date', [startDate, endDate])
     .groupBy('categories.name')
     .select('categories.name as category')
     .sum('transactions.amount as total');
 
-  const totalIncome = incomeByCategory.reduce((s, c) => s + parseFloat(c.total || 0), 0);
-  const totalExpenses = expenseByCategory.reduce((s, c) => s + parseFloat(c.total || 0), 0);
+  const givelify = await givelifyMonthTotals(tenantId, startDate, endDate);
+  const totalIncome = incomeByCategory.reduce((s, c) => s + parseFloat(c.total || 0), 0) + givelify.income;
+  const totalExpenses = expenseByCategory.reduce((s, c) => s + parseFloat(c.total || 0), 0) + givelify.fees;
 
   // Fund balances
-  const funds = await db('funds').where({ is_active: true });
+  const funds = await db('funds').where({ is_active: true, tenant_id: tenantId });
 
   // Budget vs actual
   const budgets = await db('budgets')
     .leftJoin('categories', 'budgets.category_id', 'categories.id')
-    .where({ 'budgets.year': year, 'budgets.month': month })
+    .where({ 'budgets.year': year, 'budgets.month': month, 'budgets.tenant_id': tenantId })
     .select('budgets.*', 'categories.name as category_name', 'categories.type as category_type');
 
   const actuals = await db('transactions')
     .where('status', '!=', 'void')
+    .where('tenant_id', tenantId)
     .whereBetween('date', [startDate, endDate])
     .groupBy('category_id')
     .select('category_id')
@@ -295,7 +322,7 @@ async function buildMonthlyReportData(year, month) {
     .orderBy('transactions.date');
 
   return {
-    title: `${tenantName} Monthly Finance Report — ${monthName} ${year}`,
+    title: `${tenantName || 'StewardView'} Monthly Finance Report — ${monthName} ${year}`,
     period: { year, month, month_name: monthName, start_date: startDate, end_date: endDate },
     bank_accounts: bankAccounts,
     total_bank_balance: bankAccounts.reduce((s, a) => s + parseFloat(a.current_balance || 0), 0),

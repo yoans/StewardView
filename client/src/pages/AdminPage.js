@@ -276,7 +276,9 @@ export default function AdminPage({ user, tenant, onTenantUpdated }) {
               <form onSubmit={handleSaveTenantProfile} className="card lg:col-span-2 space-y-4">
                 <div>
                   <h3 className="text-lg font-bold text-gray-900">Organization Profile</h3>
-                  <p className="text-sm text-gray-500 mt-1">These details are shown to everyone in your organization.</p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Name, phone, and website may appear in the app. Contact email is for admins only — use a church/office address, not a personal login.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -285,7 +287,7 @@ export default function AdminPage({ user, tenant, onTenantUpdated }) {
                     <input type="text" className="input" value={tenantProfile.name} onChange={e => handleTenantField('name', e.target.value)} required />
                   </div>
                   <div>
-                    <label className="label">Contact Email</label>
+                    <label className="label">Contact Email (admin only)</label>
                     <input type="email" className="input" value={tenantProfile.contact_email || ''} onChange={e => handleTenantField('contact_email', e.target.value)} placeholder="office@example.org" />
                   </div>
                   <div>

@@ -23,20 +23,11 @@ function initials(name) {
     .join('') || 'SV';
 }
 
-function formatAddress(tenant) {
-  if (!tenant) return '';
-  const cityLine = [tenant.city, tenant.state, tenant.postal_code].filter(Boolean).join(', ').replace(', ', tenant.city && tenant.state ? ', ' : ' ');
-  return [tenant.address_line1, tenant.address_line2, cityLine].filter(Boolean).join(' · ');
-}
-
 export default function Layout({ user, tenant, onLogout, children }) {
   const tenantName = tenant?.name || 'StewardView';
-  const address = formatAddress(tenant);
-  const contactItems = [tenant?.contact_email, tenant?.phone, address].filter(Boolean);
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Top Navigation */}
       <nav className="bg-blue-800 text-white shadow-lg">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex justify-between items-center h-16">
@@ -70,17 +61,6 @@ export default function Layout({ user, tenant, onLogout, children }) {
         </div>
       </nav>
 
-      {contactItems.length > 0 && (
-        <div className="bg-blue-900 text-blue-100 text-xs">
-          <div className="max-w-7xl mx-auto px-4 py-2 flex flex-wrap gap-x-4 gap-y-1">
-            {tenant?.contact_email && <span>{tenant.contact_email}</span>}
-            {tenant?.phone && <span>{tenant.phone}</span>}
-            {address && <span>{address}</span>}
-          </div>
-        </div>
-      )}
-
-      {/* Sub Navigation */}
       <div className="bg-white border-b shadow-sm">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex space-x-1 overflow-x-auto">
@@ -107,7 +87,6 @@ export default function Layout({ user, tenant, onLogout, children }) {
         </div>
       </div>
 
-      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-6">
         {children}
       </main>
