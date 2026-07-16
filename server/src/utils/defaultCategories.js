@@ -38,37 +38,6 @@ const CHURCH_CATEGORIES = [
   { name: 'Givelify Fees', type: 'expense', description: 'Online giving processing fees', sort_order: 700 },
 ];
 
-/**
- * First-draft monthly amounts from July 2026 workbook.
- * Offering: two recorded Sundays ($1,045 + $1,940.62) extrapolated to four Sundays.
- * Expenses: July actuals as the starting monthly plan (zeros kept as $0 so lines exist).
- */
-const FIRST_DRAFT_MONTHLY = {
-  Offering: 5971.24,
-  'Online Contributions': 0,
-  Interest: 0,
-  'Preacher Salary': 3611.14,
-  'Payroll Taxes': 1143.4,
-  'Payroll Service Fee': 52.25,
-  'Property Insurance': 25,
-  Electric: 79.99,
-  Gas: 42.78,
-  'Water/Sewer': 272.18,
-  'Phone/Internet': 139.54,
-  Equipment: 0,
-  Grounds: 0,
-  Sanctuary: 0,
-  Annex: 0,
-  Parsonage: 0,
-  Benevolence: 0,
-  'Mission Support': 780,
-  LTC: 0,
-  'Office Supplies': 0,
-  'Kitchen Supplies': 0,
-  'Class Materials': 0,
-  Other: 0,
-};
-
 /** Old seed names → new names (for migration remaps). */
 const CATEGORY_RENAMES = {
   'Tithes & Offerings': 'Offering',
@@ -83,7 +52,6 @@ const GIVELIFY_DIRECTED_INCOME_NAMES = ['Online Contributions', 'Offering', 'Dir
 
 module.exports = {
   CHURCH_CATEGORIES,
-  FIRST_DRAFT_MONTHLY,
   CATEGORY_RENAMES,
   GIVELIFY_GENERAL_INCOME_NAMES,
   GIVELIFY_DIRECTED_INCOME_NAMES,

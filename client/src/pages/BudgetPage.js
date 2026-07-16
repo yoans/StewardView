@@ -22,7 +22,6 @@ export default function BudgetPage({ user }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [draftNotes, setDraftNotes] = useState(null);
 
   const canEdit = ['admin', 'treasurer'].includes(user?.role);
   const yearOptions = useMemo(() => {
@@ -140,23 +139,6 @@ export default function BudgetPage({ user }) {
     }
   };
 
-  const handleApplyDraft = async () => {
-    if (!window.confirm(
-      `Apply the first-draft monthly budget to ${MONTHS[month]} ${year}?\n\n` +
-      `This replaces existing lines for that month.\n` +
-      `Offering is estimated from two July Sundays × 4; expenses use July actuals.`
-    )) return;
-    setError(''); setSuccess('');
-    try {
-      const res = await budgetsAPI.applyDraft({ year, month, replace: true });
-      setDraftNotes(res.data?.notes || null);
-      setSuccess(res.data?.message || 'Draft budget applied');
-      await loadEditData();
-    } catch (err) {
-      setError(err.response?.data?.error || 'Failed to apply draft budget');
-    }
-  };
-
   const title = view === 'edit'
     ? 'Build Budget'
     : view === 'ytd'
@@ -187,14 +169,6 @@ export default function BudgetPage({ user }) {
 
       {error && <div className="bg-red-50 text-red-700 p-3 rounded-lg text-sm mb-4">{error}</div>}
       {success && <div className="bg-green-50 text-green-700 p-3 rounded-lg text-sm mb-4">{success}</div>}
-      {draftNotes && view === 'edit' && (
-        <div className="bg-blue-50 text-blue-900 p-3 rounded-lg text-sm mb-4 space-y-1">
-          <p className="font-medium">Draft assumptions</p>
-          <p>{draftNotes.offering}</p>
-          <p>{draftNotes.expenses}</p>
-          <p>{draftNotes.online}</p>
-        </div>
-      )}
 
       {view !== 'categories' && (
         <div className="card mb-6">
@@ -233,7 +207,6 @@ export default function BudgetPage({ user }) {
           onUpsert={handleUpsertAmount}
           onDelete={handleBudgetDelete}
           onCopyPrevious={handleCopyPrevious}
-          onApplyDraft={handleApplyDraft}
         />
       ) : view === 'categories' ? (
         <CategoriesView
@@ -249,7 +222,7 @@ export default function BudgetPage({ user }) {
   );
 }
 
-function EditView({ budgets, categories, year, month, editEpoch, onUpsert, onDelete, onCopyPrevious, onApplyDraft }) {
+function EditView({ budgets, categories, year, month, editEpoch, onUpsert, onDelete, onCopyPrevious }) {
   const budgetByCategory = useMemo(() => {
     const map = {};
     budgets.forEach(b => { map[b.category_id] = b; });
@@ -402,14 +375,9 @@ function EditView({ budgets, categories, year, month, editEpoch, onUpsert, onDel
                 : `${linesSet} categor${linesSet === 1 ? 'y' : 'ies'} budgeted`}
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" className="btn-secondary text-sm" onClick={onApplyDraft}>
-              Apply July draft
-            </button>
-            <button type="button" className="btn-secondary text-sm" onClick={onCopyPrevious}>
-              Copy previous month
-            </button>
-          </div>
+          <button type="button" className="btn-secondary text-sm" onClick={onCopyPrevious}>
+            Copy previous month
+          </button>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">

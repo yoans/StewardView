@@ -83,7 +83,6 @@ export const budgetsAPI = {
   update: (id, data) => api.put(`/budgets/${id}`, data),
   delete: (id) => api.delete(`/budgets/${id}`),
   copy: (data) => api.post('/budgets/copy', data),
-  applyDraft: (data) => api.post('/budgets/apply-draft', data),
   ytd: (year) => api.get('/budgets/ytd', { params: { year } }),
 };
 

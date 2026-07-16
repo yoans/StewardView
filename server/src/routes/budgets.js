@@ -3,7 +3,6 @@ const db = require('../models/db');
 const { authenticate, authorize } = require('../middleware/auth');
 const { requireTenant } = require('../middleware/tenant');
 const { logAudit } = require('../models/auditLog');
-const { FIRST_DRAFT_MONTHLY, CHURCH_CATEGORIES } = require('../utils/defaultCategories');
 const { categoryActualsMap } = require('../utils/budgetActuals');
 
 /** Last calendar day of month as YYYY-MM-DD (no UTC shift). */
@@ -206,106 +205,6 @@ router.post('/copy', authenticate, requireTenant, authorize('admin', 'treasurer'
     res.json({ message: `Copied ${newBudgets.length} budget lines`, from: `${from_year}-${from_month}`, to: `${to_year}-${to_month}` });
   } catch (err) {
     console.error('Copy budget error:', err);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-/**
- * POST /api/budgets/apply-draft
- * Ensure church categories exist, then set monthly budget lines from FIRST_DRAFT_MONTHLY.
- * Body: { year, month, replace?: true }
- */
-router.post('/apply-draft', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
-  try {
-    const year = parseInt(req.body.year) || new Date().getFullYear();
-    const month = parseInt(req.body.month) || new Date().getMonth() + 1;
-    const replace = req.body.replace !== false;
-
-    // Ensure default categories exist
-    const existing = await db('categories').where({ tenant_id: req.tenantId });
-    const byName = new Map(existing.map((c) => [c.name.toLowerCase(), c]));
-    for (const def of CHURCH_CATEGORIES) {
-      const hit = byName.get(def.name.toLowerCase());
-      if (!hit) {
-        const [{ id }] = await db('categories').insert({
-          name: def.name,
-          type: def.type,
-          description: def.description,
-          sort_order: def.sort_order,
-          is_active: true,
-          tenant_id: req.tenantId,
-        }).returning('id');
-        byName.set(def.name.toLowerCase(), { id, name: def.name });
-      } else if (!hit.is_active) {
-        await db('categories').where({ id: hit.id }).update({
-          is_active: true,
-          sort_order: def.sort_order,
-          description: def.description,
-          updated_at: new Date().toISOString(),
-        });
-      }
-    }
-
-    const categories = await db('categories').where({ tenant_id: req.tenantId, is_active: true });
-    const catByName = new Map(categories.map((c) => [c.name, c]));
-
-    if (replace) {
-      await db('budgets').where({ year, month, tenant_id: req.tenantId }).del();
-    }
-
-    let upserted = 0;
-    for (const [name, amount] of Object.entries(FIRST_DRAFT_MONTHLY)) {
-      const cat = catByName.get(name);
-      if (!cat) continue;
-      const existingLine = await db('budgets')
-        .where({ year, month, category_id: cat.id, tenant_id: req.tenantId })
-        .first();
-      if (existingLine) {
-        await db('budgets').where({ id: existingLine.id }).update({
-          budgeted_amount: amount,
-          notes: 'First draft from July 2026 workbook',
-        });
-      } else {
-        await db('budgets').insert({
-          year,
-          month,
-          category_id: cat.id,
-          budgeted_amount: amount,
-          notes: 'First draft from July 2026 workbook',
-          created_by: req.user.id,
-          tenant_id: req.tenantId,
-        });
-      }
-      upserted++;
-    }
-
-    await logAudit({
-      entityType: 'budget', entityId: 0, action: 'apply_draft',
-      newValues: { year, month, upserted, offering_basis: '2 Sundays × 4 extrapolated' },
-      userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
-      tenantId: req.tenantId,
-    });
-
-    const lines = await db('budgets')
-      .leftJoin('categories', 'budgets.category_id', 'categories.id')
-      .where({ 'budgets.year': year, 'budgets.month': month, 'budgets.tenant_id': req.tenantId })
-      .select('budgets.*', 'categories.name as category_name', 'categories.type as category_type')
-      .orderBy(['categories.sort_order', 'categories.name']);
-
-    res.json({
-      message: `Applied first-draft budget for ${year}-${String(month).padStart(2, '0')}`,
-      year,
-      month,
-      upserted,
-      lines,
-      notes: {
-        offering: 'Offering = average of 7/5 and 7/12 × 4 Sundays ($5,971.24). Adjust when you have a fuller month.',
-        expenses: 'Expense lines use July 2026 actuals as the starting monthly plan.',
-        online: 'Online Contributions left at $0 until you set a typical Givelify month.',
-      },
-    });
-  } catch (err) {
-    console.error('Apply draft budget error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
