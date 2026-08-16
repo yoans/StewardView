@@ -316,13 +316,16 @@ async function seedDefaultFinancialStructure(tenantId, userId) {
   }));
   await db('categories').insert(categories);
 
-  await db('funds').insert([
-    { name: 'General Fund', description: 'Unrestricted general operating fund', current_balance: 0, is_restricted: false, tenant_id: tenantId },
-    { name: 'Missions Fund', description: 'Designated for missionary support', current_balance: 0, is_restricted: true, tenant_id: tenantId },
-    { name: 'Building Fund', description: 'Designated for building repairs and improvements', current_balance: 0, is_restricted: true, tenant_id: tenantId },
-    { name: 'Benevolence Fund', description: 'Designated for member/community assistance', current_balance: 0, is_restricted: true, tenant_id: tenantId },
-    { name: 'Youth Fund', description: 'Designated for youth activities and camp', current_balance: 0, is_restricted: true, tenant_id: tenantId },
-  ]);
+  const { CHURCH_FUNDS } = require('../utils/defaultFunds');
+  await db('funds').insert(
+    CHURCH_FUNDS.map((f) => ({
+      name: f.name,
+      description: f.description,
+      current_balance: 0,
+      is_restricted: f.is_restricted,
+      tenant_id: tenantId,
+    }))
+  );
 }
 
 module.exports = router;

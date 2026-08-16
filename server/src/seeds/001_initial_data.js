@@ -74,13 +74,16 @@ exports.seed = async function (knex) {
   await knex('categories').insert([...incomeCategories, ...expenseCategories]);
 
   // ── Earmarked Funds ───────────────────────────────────
-  await knex('funds').insert([
-    { id: 1, name: 'General Fund', description: 'Unrestricted general operating fund', current_balance: 0, is_restricted: false },
-    { id: 2, name: 'Missions Fund', description: 'Designated for missionary support', current_balance: 0, is_restricted: true },
-    { id: 3, name: 'Building Fund', description: 'Designated for building repairs and improvements', current_balance: 0, is_restricted: true },
-    { id: 4, name: 'Benevolence Fund', description: 'Designated for member/community assistance', current_balance: 0, is_restricted: true },
-    { id: 5, name: 'Youth Fund', description: 'Designated for youth activities and camp', current_balance: 0, is_restricted: true },
-  ]);
+  const { CHURCH_FUNDS } = require('../utils/defaultFunds');
+  await knex('funds').insert(
+    CHURCH_FUNDS.map((f, i) => ({
+      id: i + 1,
+      name: f.name,
+      description: f.description,
+      current_balance: 0,
+      is_restricted: f.is_restricted,
+    }))
+  );
 
   // Operational defaults stop here: no bank accounts, transactions, budgets,
   // or fund activity are seeded. Churches start with a clean ledger.
