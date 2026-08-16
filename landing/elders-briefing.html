@@ -126,6 +126,21 @@
       margin-top: 1.75rem;
     }
 
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.7rem;
+      margin-top: 1.15rem;
+    }
+
+    @media (max-width: 800px) {
+      .grid-3 { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (max-width: 520px) {
+      .grid-3 { grid-template-columns: 1fr; }
+    }
+
     .card {
       background: rgba(255, 255, 255, 0.72);
       border: 1px solid var(--line);
@@ -141,6 +156,57 @@
     }
 
     .card p { font-size: 0.98rem; color: var(--muted); line-height: 1.45; }
+
+    .fund-card {
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid var(--line);
+      border-radius: 1rem;
+      padding: 0.9rem 1rem;
+    }
+
+    .fund-card .tag {
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 0.28rem;
+    }
+
+    .fund-card h3 {
+      font-family: Fraunces, Georgia, serif;
+      font-size: 1.05rem;
+      margin-bottom: 0.28rem;
+      color: var(--ink);
+    }
+
+    .fund-card p {
+      font-size: 0.86rem;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .promise {
+      margin-top: 1.35rem;
+      padding: 1.15rem 1.25rem;
+      border-radius: 1rem;
+      background: var(--ink);
+      color: #f7f5f0;
+    }
+
+    .promise strong {
+      font-family: Fraunces, Georgia, serif;
+      font-size: 1.2rem;
+      display: block;
+      margin-bottom: 0.35rem;
+      color: #fff;
+    }
+
+    .promise p {
+      color: rgba(247, 245, 240, 0.78);
+      font-size: 0.98rem;
+      line-height: 1.45;
+    }
 
     .list {
       margin-top: 1.35rem;
@@ -285,6 +351,10 @@
       font-weight: 600;
       color: var(--ink);
     }
+
+    .slide.dense .brand { margin-bottom: 1.1rem; }
+    .slide.dense h2 { margin-bottom: 0.55rem; }
+    .slide.dense .body { margin-bottom: 0; }
   </style>
 </head>
 <body>
@@ -302,6 +372,7 @@
       <p class="lead">
         StewardView is our church finance workspace — so elders and trustees can see giving,
         budgets, and earmarked funds without digging through spreadsheets.
+        This briefing also names the funds we intend to establish.
       </p>
       <p class="audience">Most of you will have View access</p>
     </section>
@@ -388,7 +459,7 @@
       <h2>Funds answer: “Is this money already promised to a purpose?”</h2>
       <p class="body">
         Categories classify activity. <strong>Earmarked funds</strong> hold savings and gifts that belong to a specific cause —
-        like a building reserve, missions, youth, or benevolence.
+        building and maintenance, youth, the needy, outreach, fellowship, and emergencies.
       </p>
       <div class="flow">
         <div class="step">
@@ -415,6 +486,166 @@
         <img src="logo.svg" alt="" />
         <div class="brand-name">Steward<span>View</span></div>
       </div>
+      <p class="eyebrow">The vision</p>
+      <h2>Establish the funds. End the scramble.</h2>
+      <p class="lead">
+        We will name the money before the need arrives — so ministry is resourced on purpose,
+        not from leftover cash and crossed fingers.
+      </p>
+      <ul class="list">
+        <li>Building repairs are saved for, so deferred maintenance can be decidedly ended</li>
+        <li>Youth, outreach, game night, and gifts to the needy each have their own purse</li>
+        <li>An emergency reserve means we stop wondering if we will have enough to survive</li>
+      </ul>
+      <p class="callout">
+        <strong>A fund is a decision.</strong> Once it has a name, elders can see it, fill it, and spend from it with a clear conscience.
+      </p>
+    </section>
+
+    <!-- 7 -->
+    <section class="slide dense" data-slide="6">
+      <div class="brand">
+        <img src="logo.svg" alt="" />
+        <div class="brand-name">Steward<span>View</span></div>
+      </div>
+      <p class="eyebrow">Named funds</p>
+      <h2>Six funds. Six promises.</h2>
+      <p class="body">Each one answers a real question we already live with — so we never again spend by accident.</p>
+      <div class="grid-3">
+        <div class="fund-card">
+          <div class="tag">The building</div>
+          <h3>Building &amp; Maintenance</h3>
+          <p>Roof, HVAC, parking, the next repair. We save before things fail — so deferred maintenance can be decidedly ended.</p>
+        </div>
+        <div class="fund-card">
+          <div class="tag">The next generation</div>
+          <h3>Youth Ministry</h3>
+          <p>Camp, teaching, events. Young disciples are resourced on purpose, not from whatever is left over.</p>
+        </div>
+        <div class="fund-card">
+          <div class="tag">Our neighbor</div>
+          <h3>Gifting to the Needy</h3>
+          <p>When a family is in crisis, the gift is already waiting. Benevolence is a plan, not a scramble.</p>
+        </div>
+        <div class="fund-card">
+          <div class="tag">The invitation</div>
+          <h3>Outreach Events</h3>
+          <p>Hospitality and invitation without raiding the electric bill. We can welcome people because the fund is there.</p>
+        </div>
+        <div class="fund-card">
+          <div class="tag">Fellowship</div>
+          <h3>Game Night</h3>
+          <p>Joy has its own purse. Game night doesn’t compete with utilities — fellowship is funded in the open.</p>
+        </div>
+        <div class="fund-card">
+          <div class="tag">The floor</div>
+          <h3>Emergency Fund</h3>
+          <p>A reserve for the month that surprises us — so we never wonder if we will have enough to survive.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 8 -->
+    <section class="slide" data-slide="7">
+      <div class="brand">
+        <img src="logo.svg" alt="" />
+        <div class="brand-name">Steward<span>View</span></div>
+      </div>
+      <p class="eyebrow">Stability</p>
+      <h2>The building, and enough to survive</h2>
+      <p class="body">
+        These two funds are the floor under everything else. If they are healthy, ministry can be brave.
+      </p>
+      <div class="grid-2">
+        <div class="card">
+          <h3>Building &amp; Maintenance</h3>
+          <p>
+            “We’ll get to it later” is how roofs fail and bills explode. A named building fund
+            turns the next repair into an expected cost. Deferred maintenance can be decidedly ended
+            because we are already saving for it.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Emergency Fund</h3>
+          <p>
+            Payroll, utilities, the hard month. Elders should never have to guess whether the
+            congregation can make it. The emergency fund is the answer we can look at together.
+          </p>
+        </div>
+      </div>
+      <div class="promise">
+        <strong>No more wondering if we will have enough to survive.</strong>
+        <p>When the heater fails, we open the building fund. When the month is thin, we open the emergency fund. We decide with numbers — not with worry.</p>
+      </div>
+    </section>
+
+    <!-- 9 -->
+    <section class="slide" data-slide="8">
+      <div class="brand">
+        <img src="logo.svg" alt="" />
+        <div class="brand-name">Steward<span>View</span></div>
+      </div>
+      <p class="eyebrow">Ministry, funded</p>
+      <h2>People and presence get a purse of their own</h2>
+      <p class="body">
+        These four funds keep the work of the church from competing with the light bill.
+      </p>
+      <div class="grid-2">
+        <div class="card">
+          <h3>Youth Ministry</h3>
+          <p>Camp, materials, events. If we believe in forming the next generation, we fund it before the year begins — not after someone asks.</p>
+        </div>
+        <div class="card">
+          <h3>Gifting to the Needy</h3>
+          <p>Benevolence should be ready when the phone rings. A named fund lets us give quickly, generously, and accountably.</p>
+        </div>
+        <div class="card">
+          <h3>Outreach Events</h3>
+          <p>Inviting the community costs something. This fund says we intend to be hospitable — and we have set the money aside to mean it.</p>
+        </div>
+        <div class="card">
+          <h3>Game Night</h3>
+          <p>Fellowship is ministry. Game night has a budget so it can happen on purpose, without a last-minute pass of the hat.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 10 -->
+    <section class="slide" data-slide="9">
+      <div class="brand">
+        <img src="logo.svg" alt="" />
+        <div class="brand-name">Steward<span>View</span></div>
+      </div>
+      <p class="eyebrow">How we fill them</p>
+      <h2>Name it. Set it aside. Spend only from it.</h2>
+      <div class="flow">
+        <div class="step">
+          <div class="n">Step 1</div>
+          <strong>Create the funds</strong>
+          <p>Treasurer confirms each named fund is open in StewardView so every gift and set-aside has a home.</p>
+        </div>
+        <div class="step">
+          <div class="n">Step 2</div>
+          <strong>Fill them on purpose</strong>
+          <p>Directed giving (Givelify envelopes) plus monthly transfers from the budget or surplus.</p>
+        </div>
+        <div class="step">
+          <div class="n">Step 3</div>
+          <strong>Spend from the right purse</strong>
+          <p>Elders approve against the fund that owns the purpose — building, youth, needy, outreach, game night, or emergency.</p>
+        </div>
+      </div>
+      <p class="callout">
+        <strong>You will see the balances.</strong> Before a meeting, open Funds. If a fund is thin, that is the conversation — not a surprise at the moment of need.
+      </p>
+    </section>
+
+    <!-- 11 -->
+    <section class="slide" data-slide="10">
+      <div class="brand">
+        <img src="logo.svg" alt="" />
+        <div class="brand-name">Steward<span>View</span></div>
+      </div>
       <p class="eyebrow">Contributions</p>
       <h2>Watch how giving is directed</h2>
       <p class="body">
@@ -423,16 +654,16 @@
       </p>
       <ul class="list">
         <li><strong>General giving</strong> supports the operating budget (Tithes &amp; Offerings)</li>
-        <li><strong>Directed giving</strong> is set aside for a named purpose (Directed Contributions → fund)</li>
-        <li><strong>Needs fund</strong> means a gift could not be mapped (rare — unmatched envelopes default to General Fund)</li>
+        <li><strong>Directed giving</strong> fills a named fund — building, youth, needy, outreach, game night, or emergency</li>
+        <li><strong>Unmapped gifts</strong> default to the General Fund so nothing is lost</li>
       </ul>
       <p class="callout">
         This is how we honor donor intent and avoid spending restricted gifts on something else.
       </p>
     </section>
 
-    <!-- 7 -->
-    <section class="slide" data-slide="6">
+    <!-- 12 -->
+    <section class="slide" data-slide="11">
       <div class="brand">
         <img src="logo.svg" alt="" />
         <div class="brand-name">Steward<span>View</span></div>
@@ -445,7 +676,7 @@
       <div class="grid-2">
         <div class="card">
           <h3>Ask here</h3>
-          <p>“Are we over in utilities?” “Is missions giving where we hoped?” “Can the building fund cover this repair?”</p>
+          <p>“Can the building fund cover this repair?” “Is youth funded for camp?” “Do we have enough in emergency to get through a thin month?”</p>
         </div>
         <div class="card">
           <h3>Decide with facts</h3>
@@ -454,8 +685,8 @@
       </div>
     </section>
 
-    <!-- 8 -->
-    <section class="slide" data-slide="7">
+    <!-- 13 -->
+    <section class="slide" data-slide="12">
       <div class="brand">
         <img src="logo.svg" alt="" />
         <div class="brand-name">Steward<span>View</span></div>
@@ -463,34 +694,35 @@
       <p class="eyebrow">How you’ll use it</p>
       <h2>A simple rhythm for elders &amp; trustees</h2>
       <ul class="list">
-        <li><strong>Before a meeting</strong> — open Budget and Funds; note anything that looks off</li>
+        <li><strong>Before a meeting</strong> — open Budget and Funds; note which named funds are healthy and which are thin</li>
         <li><strong>During discussion</strong> — pull up the category or earmarked fund on screen</li>
-        <li><strong>When approving spend</strong> — confirm: budget room + correct fund (if restricted)</li>
+        <li><strong>When approving spend</strong> — confirm: budget room + the correct fund (building, youth, needy, outreach, game night, emergency)</li>
         <li><strong>Afterward</strong> — leave the bookkeeping to treasurer/admin; keep asking for clarity</li>
       </ul>
       <p class="callout"><strong>View access = informed voice.</strong> You steward decisions; the system holds the detail.</p>
     </section>
 
-    <!-- 9 -->
-    <section class="slide" data-slide="8">
+    <!-- 14 -->
+    <section class="slide" data-slide="13">
       <div class="brand">
         <img src="logo.svg" alt="" />
         <div class="brand-name">Steward<span>View</span></div>
       </div>
       <p class="eyebrow">In one sentence</p>
-      <h2>StewardView helps us spend wisely because we can see clearly.</h2>
+      <h2>Name the funds. See them fill. Stop wondering.</h2>
       <p class="lead" style="margin-top: 0.75rem;">
         Categories show the nature of the money. Earmarked funds show the purpose.
-        Budgets show the plan. Together, they support faithful decisions by elders and trustees.
+        Budgets show the plan. Together they let us end deferred maintenance, resource ministry,
+        gift the needy, and know we have enough to survive.
       </p>
       <div class="grid-2" style="margin-top: 2rem;">
         <div class="card">
           <h3>Next step</h3>
-          <p>Log in with your viewer account and click through Dashboard → Budget → Funds once before the next meeting.</p>
+          <p>The named funds are ready in StewardView. Elders log in and open Funds before the next meeting.</p>
         </div>
         <div class="card">
-          <h3>Questions?</h3>
-          <p>Ask the treasurer for a live walkthrough of one recent month — ten minutes is enough to get oriented.</p>
+          <h3>The promise</h3>
+          <p>No more scrambling. No more deferred “later.” No more wondering if we will have enough to survive.</p>
         </div>
       </div>
     </section>

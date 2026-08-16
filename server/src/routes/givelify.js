@@ -9,29 +9,7 @@ const {
   GIVELIFY_GENERAL_INCOME_NAMES,
   GIVELIFY_DIRECTED_INCOME_NAMES,
 } = require('../utils/defaultCategories');
-
-// ── Givelify Envelope → Fund mapping rules ──────────────
-const DEFAULT_ENVELOPE_MAP = {
-  'tithe': 'General Fund',
-  'tithes': 'General Fund',
-  'offering': 'General Fund',
-  'offerings': 'General Fund',
-  'general': 'General Fund',
-  'general fund': 'General Fund',
-  'general offering': 'General Fund',
-  'tithes and offerings': 'General Fund',
-  'tithes & offerings': 'General Fund',
-  'missions': 'Missions Fund',
-  'mission': 'Missions Fund',
-  'missions fund': 'Missions Fund',
-  'building': 'Building Fund',
-  'building fund': 'Building Fund',
-  'benevolence': 'Benevolence Fund',
-  'benevolence fund': 'Benevolence Fund',
-  'youth': 'Youth Fund',
-  'youth ministry': 'Youth Fund',
-  'youth fund': 'Youth Fund',
-};
+const { DEFAULT_ENVELOPE_MAP } = require('../utils/defaultFunds');
 
 function parseMoney(value) {
   const text = String(value || '').trim();
