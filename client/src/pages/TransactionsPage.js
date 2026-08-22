@@ -57,7 +57,7 @@ export default function TransactionsPage({ user }) {
       setForm(prev => (prev.fund_id || !gf ? prev : { ...prev, fund_id: String(gf.id) }));
 
       let txns = txnRes.data;
-      // Non-Givelify rows with no fund → assign General Fund (only Givelify stays untagged / Automatic)
+      // Non-Givelify rows with no fund → assign General Fund (Givelify settlements stay Various)
       if (canEdit && gf?.id) {
         const needsFund = txns.filter(
           (t) => t.status !== 'void' && !t.fund_id && !isGivelifyBankSettlement(t)
@@ -209,7 +209,7 @@ export default function TransactionsPage({ user }) {
                 {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
               </select>
               <p className="text-xs text-gray-500 mt-1">
-                Defaults to General Fund. Givelify bank settlements are labeled Automatic and skip a fund so gifts aren’t double-counted.
+                Defaults to General Fund. A Givelify bank deposit is labeled Various. Those gifts already went to funds when the giving file was imported.
               </p>
             </div>
             <div>
@@ -302,9 +302,9 @@ export default function TransactionsPage({ user }) {
                           return (
                             <span
                               className="inline-block text-xs font-medium bg-slate-100 text-slate-700 px-2 py-1 rounded"
-                              title="Givelify settlement via 5/3 BANKCARD — funds already counted on Givelify import"
+                              title="Givelify bank deposit. Funds already counted when the giving file was imported."
                             >
-                              Automatic
+                              Various
                             </span>
                           );
                         }
