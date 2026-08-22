@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { bankAPI } from '../services/api';
 import FundsVsBankBanner from '../components/FundsVsBankBanner';
 
@@ -250,10 +251,14 @@ function AccountCard({ acc, canManage, onEdit, onDeactivate }) {
 
 // ── Main Bank Page ──────────────────────────────────────────────────────────
 export default function BankPage({ user }) {
+  const [searchParams] = useSearchParams();
   const [balances, setBalances] = useState(null);
   const [showAddManual, setShowAddManual] = useState(false);
   const [editingAccount, setEditingAccount] = useState(null);
-  const [tab, setTab] = useState('accounts'); // 'accounts' | 'import' | 'setup'
+  const initialTab = ['accounts', 'import', 'setup'].includes(searchParams.get('tab'))
+    ? searchParams.get('tab')
+    : 'accounts';
+  const [tab, setTab] = useState(initialTab); // 'accounts' | 'import' | 'setup'
   const [statusMsg, setStatusMsg] = useState('');
   const [statusError, setStatusError] = useState('');
 
@@ -428,13 +433,12 @@ export default function BankPage({ user }) {
           <div className="card bg-white border border-gray-200">
             <h3 className="font-bold text-gray-900 mb-3">US Bank — export then import</h3>
             <ol className="text-sm text-gray-700 space-y-2 list-decimal list-inside mb-3">
-              <li>Sign in at <strong>usbank.com</strong> (or the US Bank mobile app → Account details on web)</li>
-              <li>Open the checking (or savings) account you use for church funds</li>
-              <li>Go to <strong>Account activity</strong> / transaction history</li>
-              <li>Choose your date range (for example, last statement period)</li>
-              <li>Select <strong>Download</strong> / <strong>Export</strong> and pick <strong>CSV</strong> (not PDF)</li>
-              <li>In StewardView → Bank → Import, choose that US Bank account, then upload the CSV</li>
-              <li>On Transactions, assign categories (and funds if needed) for new rows</li>
+              <li>Sign in at <strong>usbank.com</strong></li>
+              <li>Go to <strong>Accounts</strong>, then open <strong>Checking</strong></li>
+              <li>Set the <strong>date range</strong> you want</li>
+              <li>Click <strong>Download</strong> and choose <strong>CSV</strong></li>
+              <li>In StewardView, open Bank → Import, choose that account, and upload the file</li>
+              <li>On Transactions, assign categories and funds. Use Edit if a date or description is wrong.</li>
             </ol>
             <p className="text-sm text-gray-600 mb-2">
               US Bank CSVs usually include date, description, and amount (or withdrawal/deposit columns). StewardView accepts those names automatically.

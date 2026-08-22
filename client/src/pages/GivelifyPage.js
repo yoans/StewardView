@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { givelifyAPI, fundsAPI } from '../services/api';
 import { formatDate } from '../utils/format';
 
@@ -11,7 +12,11 @@ export default function GivelifyPage({ user }) {
   const [page, setPage] = useState(0);
   const [funds, setFunds] = useState([]);
   const [summary, setSummary] = useState(null);
-  const [tab, setTab] = useState('list'); // 'list' | 'import' | 'settings'
+  const [searchParams] = useSearchParams();
+  const initialTab = ['list', 'import', 'settings'].includes(searchParams.get('tab'))
+    ? searchParams.get('tab')
+    : 'list';
+  const [tab, setTab] = useState(initialTab); // 'list' | 'import' | 'settings'
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -252,10 +257,16 @@ export default function GivelifyPage({ user }) {
           {tab === 'import' && canEdit && (
             <div className="card max-w-3xl">
               <h3 className="text-lg font-bold mb-2">Import from Givelify CSV</h3>
+              <ol className="text-sm text-gray-700 space-y-1.5 list-decimal list-inside mb-4">
+                <li>Sign in to the church Givelify dashboard</li>
+                <li>Open <strong>Reports</strong>, then the <strong>Donations</strong> report</li>
+                <li>Set the <strong>date range</strong> you want</li>
+                <li>Export or download as <strong>CSV</strong></li>
+                <li>Upload that file here (or paste it below)</li>
+              </ol>
               <p className="text-sm text-gray-500 mb-4">
-                Export the Donations report from Givelify (CSV), then upload the file or paste it below.
-                Envelopes/campaigns are matched to your funds. Unmatched gifts default to the <strong>General Fund</strong>.
-                <strong> Donor names and emails are not stored</strong> — keep individual giver records in Givelify.
+                Envelopes map to funds. Unmatched gifts go to the <strong>General Fund</strong>.
+                Donor names and emails are not stored. Keep giver records in Givelify.
               </p>
               <div className="mb-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
                 <p>

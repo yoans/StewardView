@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { transactionsAPI, categoriesAPI, fundsAPI } from '../services/api';
 import { formatDate } from '../utils/format';
 
@@ -19,11 +20,13 @@ export default function TransactionsPage({ user }) {
   const [categories, setCategories] = useState([]);
   const [funds, setFunds] = useState([]);
   const [showForm, setShowForm] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [editingId, setEditingId] = useState(null);
   const [filters, setFilters] = useState({ type: '', start_date: '', end_date: '' });
   const [form, setForm] = useState({
     type: 'expense', amount: '', date: new Date().toISOString().slice(0, 10),
     description: '', payee_payer: '', check_number: '', category_id: '',
-    bank_account_id: 1, fund_id: '', notes: '',
+    bank_account_id: '', fund_id: '', notes: '',
   });
   const [loading, setLoading] = useState(true);
   const canEdit = ['admin', 'treasurer', 'finance_committee'].includes(user.role);
@@ -38,10 +41,46 @@ export default function TransactionsPage({ user }) {
     payee_payer: '',
     check_number: '',
     category_id: '',
-    bank_account_id: 1,
+    bank_account_id: '',
     fund_id: generalFundId ? String(generalFundId) : '',
     notes: '',
   });
+
+  const closeForm = () => {
+    setShowForm(false);
+    setEditingId(null);
+    setForm(emptyForm());
+  };
+
+  const startCreate = () => {
+    setShowImport(false);
+    if (showForm && !editingId) {
+      closeForm();
+      return;
+    }
+    setEditingId(null);
+    setForm(emptyForm());
+    setShowForm(true);
+  };
+
+  const startEdit = (txn) => {
+    setShowImport(false);
+    setEditingId(txn.id);
+    setForm({
+      type: txn.type || 'expense',
+      amount: txn.amount != null ? String(txn.amount) : '',
+      date: formatDate(txn.date),
+      description: txn.description || '',
+      payee_payer: txn.payee_payer || '',
+      check_number: txn.check_number || '',
+      category_id: txn.category_id ? String(txn.category_id) : '',
+      bank_account_id: txn.bank_account_id ? String(txn.bank_account_id) : '',
+      fund_id: txn.fund_id ? String(txn.fund_id) : '',
+      notes: txn.notes || '',
+    });
+    setShowForm(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -75,6 +114,25 @@ export default function TransactionsPage({ user }) {
           txns = refreshed.data;
         }
       }
+      const onlineCat = catRes.data.find((c) => c.name === 'Online Contributions' && c.type === 'income');
+      if (canEdit && onlineCat?.id) {
+        const needsOnline = txns.filter(
+          (t) => t.status !== 'void' && isGivelifyBankSettlement(t) && !t.category_id
+        );
+        if (needsOnline.length) {
+          await Promise.all(
+            needsOnline.map((t) =>
+              transactionsAPI.update(t.id, {
+                category_id: onlineCat.id,
+                fund_id: t.fund_id || null,
+                change_reason: 'Givelify bank deposit categorized as Online Contributions',
+              }).catch(() => null)
+            )
+          );
+          const refreshed = await transactionsAPI.list(filters);
+          txns = refreshed.data;
+        }
+      }
       setTransactions(txns);
     } catch (err) { console.error(err); }
     setLoading(false);
@@ -86,18 +144,33 @@ export default function TransactionsPage({ user }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const payload = {
+      type: form.type,
+      amount: parseFloat(form.amount),
+      date: form.date,
+      description: form.description,
+      payee_payer: form.payee_payer || null,
+      check_number: form.check_number || null,
+      category_id: form.category_id ? parseInt(form.category_id, 10) : null,
+      bank_account_id: form.bank_account_id ? parseInt(form.bank_account_id, 10) : null,
+      fund_id: form.fund_id
+        ? parseInt(form.fund_id, 10)
+        : (editingId ? null : (generalFundId || null)),
+      notes: form.notes || null,
+    };
     try {
-      await transactionsAPI.create({
-        ...form,
-        amount: parseFloat(form.amount),
-        category_id: form.category_id ? parseInt(form.category_id) : null,
-        fund_id: form.fund_id ? parseInt(form.fund_id) : (generalFundId || null),
-      });
-      setShowForm(false);
-      setForm(emptyForm());
+      if (editingId) {
+        await transactionsAPI.update(editingId, {
+          ...payload,
+          change_reason: 'Edited from transactions list',
+        });
+      } else {
+        await transactionsAPI.create(payload);
+      }
+      closeForm();
       loadData();
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to create transaction');
+      alert(err.response?.data?.error || (editingId ? 'Failed to save changes' : 'Failed to create transaction'));
     }
   };
 
@@ -146,18 +219,70 @@ export default function TransactionsPage({ user }) {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between items-center mb-6 gap-3 flex-wrap">
         <h2 className="text-2xl font-bold text-gray-900">Transactions</h2>
         {canEdit && (
-          <button className="btn-primary" onClick={() => setShowForm(!showForm)}>
-            {showForm ? 'Cancel' : '+ New Transaction'}
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => {
+                setShowImport((v) => !v);
+                closeForm();
+              }}
+            >
+              {showImport ? 'Close import' : 'Import from CSV'}
+            </button>
+            <button type="button" className="btn-primary" onClick={startCreate}>
+              {showForm && !editingId ? 'Cancel' : '+ New Transaction'}
+            </button>
+          </div>
         )}
       </div>
 
+      {showImport && canEdit && (
+        <div className="card mb-6">
+          <h3 className="text-lg font-bold mb-2">Import from CSV</h3>
+          <p className="text-sm text-gray-600 mb-4">
+            Download the file from the bank or Givelify, then upload it in StewardView. The bank file is cash. The Givelify file is funds.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <h4 className="font-bold text-gray-900 mb-2">US Bank checking</h4>
+              <ol className="text-sm text-gray-700 space-y-1.5 list-decimal list-inside">
+                <li>Sign in at usbank.com</li>
+                <li>Go to <strong>Accounts</strong>, then open <strong>Checking</strong></li>
+                <li>Set the <strong>date range</strong> you want</li>
+                <li>Click <strong>Download</strong> and choose <strong>CSV</strong></li>
+                <li>In StewardView, open Bank → Import and upload that file</li>
+              </ol>
+              <Link to="/bank?tab=import" className="btn-primary text-sm inline-block mt-4">Open Bank import</Link>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <h4 className="font-bold text-gray-900 mb-2">Givelify donations</h4>
+              <ol className="text-sm text-gray-700 space-y-1.5 list-decimal list-inside">
+                <li>Sign in to the church Givelify dashboard</li>
+                <li>Open <strong>Reports</strong>, then the <strong>Donations</strong> report</li>
+                <li>Set the <strong>date range</strong> you want</li>
+                <li>Export or download as <strong>CSV</strong></li>
+                <li>In StewardView, open Givelify → Import CSV and upload that file</li>
+              </ol>
+              <Link to="/givelify?tab=import" className="btn-primary text-sm inline-block mt-4">Open Givelify import</Link>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showForm && (
         <div className="card mb-6">
-          <h3 className="text-lg font-bold mb-4">Record New Transaction</h3>
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-bold">{editingId ? 'Edit Transaction' : 'Record New Transaction'}</h3>
+            {editingId && (
+              <button type="button" className="text-sm text-gray-500 hover:text-gray-800" onClick={closeForm}>
+                Cancel edit
+              </button>
+            )}
+          </div>
           <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className="label">Type</label>
@@ -327,15 +452,24 @@ export default function TransactionsPage({ user }) {
                       {txn.type === 'income' ? '+' : '-'}{fmt(txn.amount)}
                     </td>
                     {canEdit && (
-                      <td className="py-2 text-right">
+                      <td className="py-2 text-right whitespace-nowrap">
                         {!isCanceled && (
-                          <button
-                            type="button"
-                            className="text-xs text-red-500 hover:text-red-700"
-                            onClick={() => handleCancel(txn.id)}
-                          >
-                            Cancel
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              className="text-xs text-blue-600 hover:text-blue-800 mr-3"
+                              onClick={() => startEdit(txn)}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              className="text-xs text-red-500 hover:text-red-700"
+                              onClick={() => handleCancel(txn.id)}
+                            >
+                              Cancel
+                            </button>
+                          </>
                         )}
                       </td>
                     )}

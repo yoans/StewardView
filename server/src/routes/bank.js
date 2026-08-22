@@ -318,6 +318,7 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
         // - Givelify settlement (5/3 BANKCARD / Givelify) → no fund (gifts already on Givelify import)
         // - Other deposits → General Fund (plate/manual); change on Transactions if needed
         let fundId = null;
+        let categoryId = null;
         let rowNotes = notes;
         const isGivelifyDeposit = type === 'income' && looksLikeGivelifySettlement(description, payee);
 
@@ -335,6 +336,13 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
               .filter(Boolean)
               .join(' | ')
               .slice(0, 500);
+            const onlineCat = await db('categories')
+              .where({ tenant_id: req.tenantId, type: 'income', is_active: true, name: 'Online Contributions' })
+              .first()
+              || await db('categories')
+                .where({ tenant_id: req.tenantId, type: 'income', is_active: true, name: 'Tithes & Offerings' })
+                .first();
+            if (onlineCat) categoryId = onlineCat.id;
           } else {
             const general = await getGeneralFund(req.tenantId);
             if (general) fundId = general.id;
@@ -368,6 +376,7 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
             check_number: checkNumber,
             bank_account_id: account.id,
             fund_id: fundId,
+            category_id: categoryId,
             status: 'cleared',
             notes: rowNotes,
             created_by: req.user.id,

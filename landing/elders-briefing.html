@@ -102,8 +102,8 @@
       color: var(--ink);
     }
 
-    h1 { font-size: clamp(2.2rem, 5vw, 3.4rem); max-width: 16ch; margin-bottom: 1rem; }
-    h2 { font-size: clamp(1.7rem, 3.5vw, 2.4rem); margin-bottom: 0.85rem; }
+    h1 { font-size: clamp(2rem, 4.5vw, 3rem); max-width: 22ch; margin-bottom: 1rem; }
+    h2 { font-size: clamp(1.55rem, 3.2vw, 2.15rem); margin-bottom: 0.85rem; }
 
     .lead {
       font-size: clamp(1.05rem, 2vw, 1.25rem);
@@ -273,22 +273,33 @@
       font-size: 0.8rem;
     }
 
-    .title-slide .brand { margin-bottom: 2.5rem; }
-    .title-slide h1 { max-width: 14ch; }
-    .audience {
-      display: inline-block;
+    .title-slide .brand { margin-bottom: 2rem; }
+
+    .roles {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
       margin-top: 1.5rem;
-      padding: 0.45rem 0.85rem;
-      border-radius: 999px;
-      background: rgba(16, 23, 72, 0.08);
-      font-size: 0.9rem;
-      font-weight: 600;
-      color: var(--ink);
+      flex: 1;
     }
+
+    @media (max-width: 800px) {
+      .roles { grid-template-columns: 1fr; }
+    }
+
+    .roles .card {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      min-height: 9.5rem;
+    }
+
+    .roles .card h3 { margin-bottom: 0.65rem; }
+    .roles .card p + p { margin-top: 0.55rem; }
   </style>
 </head>
 <body>
-  <p class="hint">Arrow keys or click to advance · Esc for overview</p>
+  <p class="hint">Arrow keys or click to advance</p>
 
   <div class="deck" id="deck">
     <section class="slide title-slide active" data-slide="0">
@@ -296,13 +307,15 @@
         <img src="logo.svg" alt="" />
         <div class="brand-name">Steward<span>View</span></div>
       </div>
-      <p class="eyebrow">Elders and Trustees</p>
-      <h1>See the money. Steward the work.</h1>
+      <p class="eyebrow">For elders and trustees</p>
+      <h1>A shared view of the budget and funds</h1>
       <p class="lead">
-        StewardView is where we keep the church books in one place.
-        Giving, spending, funds, and the monthly plan. You can look at the same numbers we use to decide.
+        StewardView is an information-sharing tool. I run it and I control the data.
+        The bank account and Givelify are still the source of truth. This is how we look at the same numbers so we can agree and plan.
       </p>
-      <p class="audience">Most of you will have View access</p>
+      <p class="body" style="margin-top: 1.25rem;">
+        Most of you will have View access. You can see the dashboard, transactions, budget, and funds.
+      </p>
     </section>
 
     <section class="slide" data-slide="1">
@@ -310,22 +323,28 @@
         <img src="logo.svg" alt="" />
         <div class="brand-name">Steward<span>View</span></div>
       </div>
-      <p class="eyebrow">Why this matters</p>
-      <h2>A church that takes stewardship seriously can go far.</h2>
-      <p class="body">
-        We have a building to keep. People to help. A year to plan. Room to grow.
-        Those things need money, and they need trust. Trust comes when leadership can see what we have and where it goes.
-      </p>
-      <div class="grid-2">
-        <div class="card">
-          <h3>Care and help</h3>
-          <p>Repairs, utilities, benevolence, missions. We spend on purpose when we know what is available.</p>
+      <p class="eyebrow">What we use it for</p>
+      <h2>Do we have enough to keep the lights on? Can we plan ahead?</h2>
+      <div class="flow">
+        <div class="step">
+          <div class="n">Bank</div>
+          <strong>Cash in checking</strong>
+          <p>We import the bank CSV. Starting balance plus deposits minus withdrawals. That is the cash on hand.</p>
         </div>
-        <div class="card">
-          <h3>Plan and grow</h3>
-          <p>A monthly budget is a promise to ourselves. When we track it, we can take the next faithful step.</p>
+        <div class="step">
+          <div class="n">Givelify</div>
+          <strong>Giving into funds</strong>
+          <p>We import the giving file. Gifts credit funds. Fees come out of General. The bank deposit from Givelify is labeled Various because the funds already got those gifts.</p>
+        </div>
+        <div class="step">
+          <div class="n">Budget</div>
+          <strong>The monthly plan</strong>
+          <p>Categories on transactions show how the month compares to what we usually spend.</p>
         </div>
       </div>
+      <p class="callout">
+        Fund totals should match the checking book balance. If they do not, we investigate and adjust.
+      </p>
     </section>
 
     <section class="slide" data-slide="2">
@@ -333,28 +352,21 @@
         <img src="logo.svg" alt="" />
         <div class="brand-name">Steward<span>View</span></div>
       </div>
-      <p class="eyebrow">How it works</p>
-      <h2>Three ledgers, one picture</h2>
-      <div class="flow">
-        <div class="step">
-          <div class="n">Checking</div>
-          <strong>The bank</strong>
-          <p>We import the bank CSV. That is the cash in the account. Starting balance plus deposits minus withdrawals.</p>
+      <p class="eyebrow">How we operate StewardView</p>
+      <h2>Import. Categorize. Assign a fund.</h2>
+      <p class="body">
+        That is the weekly work. I import the bank file and the Givelify file. Then each transaction gets a budget category and a fund.
+      </p>
+      <div class="grid-2">
+        <div class="card">
+          <h3>Category</h3>
+          <p>What kind of receipt or bill it is. Offering, preacher salary, electric, mission support, office supplies, and the other lines from our usual workbook.</p>
         </div>
-        <div class="step">
-          <div class="n">Funds</div>
-          <strong>The purpose</strong>
-          <p>Givelify gifts credit funds. Plate and checks do too when we tag them. Expenses come out of a fund, usually General.</p>
-        </div>
-        <div class="step">
-          <div class="n">Budget</div>
-          <strong>The plan</strong>
-          <p>Categories on each transaction tell us how the month compares to what we planned.</p>
+        <div class="card">
+          <h3>Fund</h3>
+          <p>Where the money sits. General for ordinary operations. A purpose fund when the gift or spend belongs there.</p>
         </div>
       </div>
-      <p class="callout">
-        Fund totals should match the checking book balance. If they do not, we look until they do.
-      </p>
     </section>
 
     <section class="slide" data-slide="3">
@@ -362,22 +374,17 @@
         <img src="logo.svg" alt="" />
         <div class="brand-name">Steward<span>View</span></div>
       </div>
-      <p class="eyebrow">Transactions</p>
-      <h2>Every row can be categorized</h2>
+      <p class="eyebrow">The budget</p>
+      <h2>Built from how we already spend</h2>
       <p class="body">
-        Income and expense sit on the same list. We assign a budget category and a fund.
-        A Givelify bank deposit is labeled <strong>Various</strong>. Those gifts already went to funds when we imported giving.
+        The monthly budget is a forecast of regular items: payroll, utilities, insurance, mission support, and the rest of the usual month.
+        It is there so we can see a surprise early, and so we can talk about the year with the same list in front of us.
       </p>
-      <div class="grid-2">
-        <div class="card">
-          <h3>Receipts</h3>
-          <p>Offering. Online contributions. Interest.</p>
-        </div>
-        <div class="card">
-          <h3>Disbursements</h3>
-          <p>Preacher salary, payroll, insurance, utilities, maintenance, missions, LTC, supplies, and the rest of our workbook lines.</p>
-        </div>
-      </div>
+      <ul class="list">
+        <li>Regular bills stay on the budget.</li>
+        <li>A special expense gets its own fund. A roof, a van, a one-time project.</li>
+        <li>A regular special item also gets a fund. Something we do every year that is not the ordinary month, like LTC.</li>
+      </ul>
     </section>
 
     <section class="slide" data-slide="4">
@@ -386,15 +393,15 @@
         <div class="brand-name">Steward<span>View</span></div>
       </div>
       <p class="eyebrow">Funds</p>
-      <h2>Purpose money stays visible</h2>
+      <h2>I need your help on recurring fund gifts</h2>
       <p class="body">
-        Categories say what kind of activity it was. Funds say what the money is for:
-        General, Missions, Building, Benevolence, Youth.
+        I can import and categorize. What I cannot do alone is keep purpose funds funded.
+        If we want money set aside for missions, building, benevolence, youth, or a coming project, people have to give to those funds on a regular basis.
       </p>
       <ul class="list">
-        <li>Online gifts map from the Givelify envelope to a fund. Unmatched gifts go to General.</li>
-        <li>If we move money out of a purpose fund, we tell leadership. Donors gave that for a reason.</li>
-        <li>You can open a fund and see what is in it before we approve a spend.</li>
+        <li>Givelify envelopes map to funds. Unmatched gifts go to General.</li>
+        <li>If we spend from a purpose fund, we say so. That money was given for a reason.</li>
+        <li>I am asking you to help drive recurring contributions into those funds, in the congregation and in this room.</li>
       </ul>
     </section>
 
@@ -403,61 +410,24 @@
         <img src="logo.svg" alt="" />
         <div class="brand-name">Steward<span>View</span></div>
       </div>
-      <p class="eyebrow">The monthly plan</p>
-      <h2>We set amounts. Then we live with them.</h2>
-      <p class="body">
-        Build Budget is a list of categories with a dollar for the month.
-        Budget vs. Actual shows what we planned and what happened. Year to date is the longer view.
-      </p>
-      <div class="grid-2">
+      <p class="eyebrow">Who does what</p>
+      <h2>I run the tool. You use it to agree and plan.</h2>
+      <div class="roles">
         <div class="card">
-          <h3>Good questions</h3>
-          <p>Are utilities where we expected? Can the building fund cover this repair? Is mission support current?</p>
+          <h3>What I do</h3>
+          <p>Import the bank and Givelify files. Categorize. Assign funds. Keep the monthly budget current. Fix a mismatch if funds and checking disagree.</p>
         </div>
         <div class="card">
-          <h3>A good decision</h3>
-          <p>Room in the plan, money in the right fund, and a clear reason that serves the church.</p>
-        </div>
-      </div>
-    </section>
-
-    <section class="slide" data-slide="6">
-      <div class="brand">
-        <img src="logo.svg" alt="" />
-        <div class="brand-name">Steward<span>View</span></div>
-      </div>
-      <p class="eyebrow">Your part</p>
-      <h2>Treasurers enter. Elders see and ask.</h2>
-      <ul class="list">
-        <li><strong>Before a meeting.</strong> Open Dashboard, Budget, and Funds.</li>
-        <li><strong>In the discussion.</strong> Put the category or fund on the screen.</li>
-        <li><strong>When we approve a spend.</strong> Confirm the plan and the fund.</li>
-        <li><strong>Afterward.</strong> The treasurer keeps the books. You keep the questions.</li>
-      </ul>
-      <p class="callout">
-        View access is enough. You are here to shepherd the work, and the numbers help you do that.
-      </p>
-    </section>
-
-    <section class="slide" data-slide="7">
-      <div class="brand">
-        <img src="logo.svg" alt="" />
-        <div class="brand-name">Steward<span>View</span></div>
-      </div>
-      <p class="eyebrow">The point</p>
-      <h2>Take care of what we have been given.</h2>
-      <p class="lead" style="margin-top: 0.75rem;">
-        The building. The people. The plan. The chance to grow.
-        StewardView is how we keep that story honest, month after month, together.
-      </p>
-      <div class="grid-2" style="margin-top: 2rem;">
-        <div class="card">
-          <h3>Before the next meeting</h3>
-          <p>Log in once. Click Dashboard, then Budget, then Funds.</p>
+          <h3>What you do</h3>
+          <p>Log in with View access. Look at Dashboard, Budget, and Funds before we meet. Ask questions from the same numbers.</p>
         </div>
         <div class="card">
-          <h3>If you want a walkthrough</h3>
-          <p>Ask for ten minutes on one recent month. That is enough to get your bearings.</p>
+          <h3>When we decide</h3>
+          <p>Look at the category and the fund on the screen. Confirm we have cash, we have plan room, and we are using the right fund.</p>
+        </div>
+        <div class="card">
+          <h3>What I need from you</h3>
+          <p>Help people give regularly into the purpose funds. That is how we pay for special work without starving the lights.</p>
         </div>
       </div>
     </section>
