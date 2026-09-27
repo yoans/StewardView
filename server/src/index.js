@@ -19,7 +19,6 @@ const bankRoutes = require('./routes/bank');
 const reportRoutes = require('./routes/reports');
 const auditRoutes = require('./routes/audit');
 const categoryRoutes = require('./routes/categories');
-const givelifyRoutes = require('./routes/givelify');
 const backupRoutes = require('./routes/backups');
 const platformRoutes = require('./routes/platform');
 const onboardingRoutes = require('./routes/onboarding');
@@ -47,7 +46,6 @@ app.use(cors({ origin: corsOrigins, credentials: true }));
 // Raw body required for Stripe webhook signature verification (must come BEFORE express.json)
 app.use('/api/onboarding/webhook', express.raw({ type: 'application/json' }));
 
-// Allow larger JSON bodies for Givelify CSV paste imports (default 100kb is too small)
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
@@ -127,7 +125,6 @@ app.use('/api/bank', bankRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/categories', categoryRoutes);
-app.use('/api/givelify', givelifyRoutes);
 app.use('/api/backups', backupRoutes);
 app.use('/api/platform', platformRoutes);
 app.use('/api/onboarding', onboardingRoutes);

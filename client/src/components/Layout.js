@@ -5,7 +5,6 @@ const navItems = [
   { path: '/', label: 'Dashboard', icon: '📊' },
   { path: '/transactions', label: 'Transactions', icon: '💰' },
   { path: '/funds', label: 'Funds', icon: '🏦' },
-  { path: '/givelify', label: 'Givelify', icon: '💝' },
   { path: '/budget', label: 'Budget', icon: '📋' },
   { path: '/bank', label: 'Bank', icon: '🏧' },
   { path: '/reports', label: 'Reports', icon: '📄' },

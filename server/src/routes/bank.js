@@ -167,10 +167,9 @@ function resolveCashMovement(row) {
 }
 
 /**
- * Givelify settlements are not a separate Fifth Third church account.
- * After verification, Givelify ACH posts as "5/3 BANKCARD SYS" (Fifth Third owns
- * their card processor / Vantiv). Early setup may show "Givelify, LLC".
- * Note: other merchants (e.g. Toast) can also use 5/3 Bankcard — uncommon for churches.
+ * Givelify ACH deposits post as "5/3 BANKCARD SYS" (Fifth Third is their card
+ * processor). Early setup may show "Givelify, LLC". Used only to pick the
+ * Online Contributions category.
  */
 function looksLikeGivelifySettlement(...parts) {
   const t = parts.filter(Boolean).join(' ').toLowerCase();
@@ -313,14 +312,10 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
           null;
         const notes = String(getValue(row, ['notes', 'note'])).trim() || null;
 
-        // Fund assignment for bank rows:
-        // - Expenses → General Fund (default)
-        // - Givelify settlement (5/3 BANKCARD / Givelify) → no fund (gifts already on Givelify import)
-        // - Other deposits → General Fund (plate/manual); change on Transactions if needed
+        // Every bank row lands in the General Fund; reassign on Transactions if needed.
         let fundId = null;
         let categoryId = null;
-        let rowNotes = notes;
-        const isGivelifyDeposit = type === 'income' && looksLikeGivelifySettlement(description, payee);
+        const rowNotes = notes;
 
         if (type === 'expense') {
           try {
@@ -331,21 +326,13 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
             continue;
           }
         } else if (type === 'income') {
-          if (isGivelifyDeposit) {
-            rowNotes = [notes, 'Likely Givelify settlement (5/3 BANKCARD / Fifth Third processor) — funds already counted on Givelify import']
-              .filter(Boolean)
-              .join(' | ')
-              .slice(0, 500);
+          const general = await getGeneralFund(req.tenantId);
+          if (general) fundId = general.id;
+          if (looksLikeGivelifySettlement(description, payee)) {
             const onlineCat = await db('categories')
               .where({ tenant_id: req.tenantId, type: 'income', is_active: true, name: 'Online Contributions' })
-              .first()
-              || await db('categories')
-                .where({ tenant_id: req.tenantId, type: 'income', is_active: true, name: 'Tithes & Offerings' })
-                .first();
+              .first();
             if (onlineCat) categoryId = onlineCat.id;
-          } else {
-            const general = await getGeneralFund(req.tenantId);
-            if (general) fundId = general.id;
           }
         }
 

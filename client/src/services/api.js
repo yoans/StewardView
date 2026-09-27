@@ -120,16 +120,6 @@ export const categoriesAPI = {
   ensureDefaults: () => api.post('/categories/ensure-defaults'),
 };
 
-// ── Givelify ─────────────────────────────────────────────
-export const givelifyAPI = {
-  list: (params) => api.get('/givelify', { params }),
-  summary: () => api.get('/givelify/summary'),
-  import: (payload) => api.post('/givelify/import', typeof payload === 'string' ? { csv: payload } : Array.isArray(payload) ? { contributions: payload } : payload),
-  earmark: (id, fund_id) => api.post(`/givelify/${id}/earmark`, { fund_id }),
-  getEnvelopeMap: () => api.get('/givelify/envelope-map'),
-  updateEnvelopeMap: (map) => api.put('/givelify/envelope-map', { map }),
-};
-
 // ── Backups ──────────────────────────────────────────────
 export const backupsAPI = {
   list: () => api.get('/backups'),

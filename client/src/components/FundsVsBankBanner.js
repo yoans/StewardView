@@ -26,7 +26,7 @@ export default function FundsVsBankBanner({ recon, className = 'mb-6' }) {
         {recon.note ||
           (ok
             ? 'Fund totals match checking book balance.'
-            : 'Fund totals should equal the checking book balance. Pending Givelify deposits, expenses not on General Fund, or starting-balance misalignment are common causes.')}
+            : 'Fund totals should equal the checking book balance. Common causes: transactions with no fund, manual fund adjustments, or a starting balance that does not match the funds.')}
       </p>
     </div>
   );

@@ -45,7 +45,6 @@ async function applyFundMovement({
 
 /**
  * Fund-ledger adjustment with no cash/bank transaction row.
- * Used for Givelify gifts (contribution) and fees (disbursement from General Fund).
  */
 async function postFundAdjustment({
   fundId,
@@ -150,7 +149,7 @@ function buildFundsBankReconciliation(funds, bankAccounts) {
     balanced,
     note: balanced
       ? 'Fund totals match checking book balance.'
-      : 'Fund totals should equal the checking book balance. Pending Givelify deposits (gifts already on funds), missing fees, unassigned expenses, or starting-balance misalignment are common causes.',
+      : 'Fund totals should equal the checking book balance. Common causes: transactions with no fund, manual fund adjustments, or a starting balance that does not match the funds.',
   };
 }
 

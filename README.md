@@ -7,7 +7,7 @@ StewardView is a multi-tenant church finance platform with a public marketing si
 - Multi-tenant church finance management
 - Public onboarding flow with optional paid Stripe checkout
 - Manual bank account management with CSV transaction import
-- Budgets, funds, audit history, reports, and Givelify support
+- Budgets, funds, audit history, and reports
 - Platform admin controls for tenant oversight
 
 ## Tech Stack

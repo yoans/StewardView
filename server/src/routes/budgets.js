@@ -45,7 +45,6 @@ router.get('/vs-actual', authenticate, requireTenant, async (req, res) => {
       .where({ 'budgets.year': year, 'budgets.month': month, 'budgets.tenant_id': req.tenantId })
       .select('budgets.*', 'categories.name as category_name', 'categories.type as category_type');
 
-    // Get actuals by category (bank/cash txns + Givelify fund gifts/fees)
     const actualMap = await categoryActualsMap(req.tenantId, startDate, endDate);
 
     const comparison = budgets.map(b => ({
@@ -228,7 +227,6 @@ router.get('/ytd', authenticate, requireTenant, async (req, res) => {
       .select('budgets.category_id', 'categories.name as category_name', 'categories.type as category_type')
       .sum('budgets.budgeted_amount as ytd_budgeted');
 
-    // YTD actuals (bank/cash + Givelify fund gifts/fees)
     const actualMap = await categoryActualsMap(req.tenantId, startDate, endDate);
 
     const comparison = ytdBudgets.map(b => ({

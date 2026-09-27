@@ -34,8 +34,6 @@ const CHURCH_CATEGORIES = [
   { name: 'Kitchen Supplies', type: 'expense', description: 'Kitchen and fellowship supplies', sort_order: 610 },
   { name: 'Class Materials', type: 'expense', description: 'Bible class and curriculum materials', sort_order: 620 },
   { name: 'Other', type: 'expense', description: 'Miscellaneous expenses', sort_order: 630 },
-  // Processing (used by Givelify fee posting)
-  { name: 'Givelify Fees', type: 'expense', description: 'Online giving processing fees', sort_order: 700 },
 ];
 
 /** Old seed names → new names (for migration remaps). */
@@ -46,13 +44,7 @@ const CATEGORY_RENAMES = {
   'Missions & Outreach': 'Mission Support',
 };
 
-/** Prefer these income names when posting Givelify gifts (online channel). */
-const GIVELIFY_GENERAL_INCOME_NAMES = ['Online Contributions', 'Offering', 'Tithes & Offerings'];
-const GIVELIFY_DIRECTED_INCOME_NAMES = ['Online Contributions', 'Offering', 'Directed Contributions'];
-
 module.exports = {
   CHURCH_CATEGORIES,
   CATEGORY_RENAMES,
-  GIVELIFY_GENERAL_INCOME_NAMES,
-  GIVELIFY_DIRECTED_INCOME_NAMES,
 };

@@ -184,8 +184,7 @@ function ManualAccountForm({ onSave, onCancel, initial }) {
       </div>
       <p className="text-xs text-gray-500">
         Set the starting balance for the year (or when you begin tracking). Book balance =
-        starting balance + imported bank deposits − withdrawals. Givelify gifts update funds separately;
-        cash appears on the bank CSV as a Givelify deposit.
+        starting balance + imported bank deposits − withdrawals.
       </p>
       {initial?.calculated_balance != null && (
         <p className="text-sm text-blue-800 bg-blue-50 rounded p-2">
@@ -456,9 +455,8 @@ export default function BankPage({ user }) {
               total to your bank statement — StewardView is not a live feed.
             </p>
             <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
-              <li>Givelify gifts update <strong>funds</strong> on Givelify import — not when the bank deposit hits</li>
-              <li><strong>5/3 BANKCARD SYS</strong> = Givelify settlement, shown as <strong>Various</strong> on Transactions (no fund tag)</li>
-              <li>Other deposits default to <strong>General Fund</strong>; change the fund on Transactions if needed</li>
+              <li>Deposits go to the <strong>General Fund</strong>; change the fund on Transactions if needed</li>
+              <li><strong>5/3 BANKCARD SYS</strong> is a Givelify deposit and is categorized as <strong>Online Contributions</strong></li>
               <li>Imported <strong>expenses</strong> draw from the <strong>General Fund</strong> by default</li>
               <li>Sum of all fund balances should equal the checking book balance — flagged on Dashboard, Bank, and Funds</li>
             </ul>

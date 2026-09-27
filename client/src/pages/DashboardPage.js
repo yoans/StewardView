@@ -97,8 +97,7 @@ export default function DashboardPage({ tenant }) {
               'Bank totals are calculated from each account’s starting balance plus imported bank transactions. Compare to your bank statement when reconciling — StewardView is not a live bank feed.'}
           </p>
           <p className="mt-2 text-amber-800">
-            Givelify gifts are fund adjustments (not bank transactions); cash hits checking when you import the deposit.
-            Fees reduce the General Fund. Bank expenses draw from a fund (General by default).
+            Deposits and expenses go to the General Fund by default. Change the fund on Transactions if needed.
           </p>
         </div>
       )}

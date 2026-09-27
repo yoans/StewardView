@@ -5,13 +5,12 @@ import { formatDate } from '../utils/format';
 
 const fmt = (n) => parseFloat(n || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
-/** Bank settlement from Givelify (5/3 BANKCARD) — funds already counted on Givelify import. */
+/** Givelify ACH deposit (posts as 5/3 BANKCARD SYS). */
 function isGivelifyBankSettlement(txn) {
   if (!txn || txn.type !== 'income') return false;
-  const hay = `${txn.description || ''} ${txn.payee_payer || ''} ${txn.notes || ''}`.toLowerCase();
+  const hay = `${txn.description || ''} ${txn.payee_payer || ''}`.toLowerCase();
   if (hay.includes('givelify')) return true;
   if (/5\s*\/\s*3/.test(hay) && hay.includes('bankcard')) return true;
-  if (hay.includes('likely givelify settlement')) return true;
   return false;
 }
 
@@ -96,11 +95,8 @@ export default function TransactionsPage({ user }) {
       setForm(prev => (prev.fund_id || !gf ? prev : { ...prev, fund_id: String(gf.id) }));
 
       let txns = txnRes.data;
-      // Non-Givelify rows with no fund → assign General Fund (Givelify settlements stay Various)
       if (canEdit && gf?.id) {
-        const needsFund = txns.filter(
-          (t) => t.status !== 'void' && !t.fund_id && !isGivelifyBankSettlement(t)
-        );
+        const needsFund = txns.filter((t) => t.status !== 'void' && !t.fund_id);
         if (needsFund.length) {
           await Promise.all(
             needsFund.map((t) =>
@@ -124,7 +120,7 @@ export default function TransactionsPage({ user }) {
             needsOnline.map((t) =>
               transactionsAPI.update(t.id, {
                 category_id: onlineCat.id,
-                fund_id: t.fund_id || null,
+                fund_id: t.fund_id || gf?.id || null,
                 change_reason: 'Givelify bank deposit categorized as Online Contributions',
               }).catch(() => null)
             )
@@ -186,7 +182,6 @@ export default function TransactionsPage({ user }) {
   };
 
   const handleFundChange = async (txn, fundId) => {
-    if (isGivelifyBankSettlement(txn)) return; // Automatic — do not assign a fund
     const next = fundId ? parseInt(fundId, 10) : (generalFundId || null);
     if (String(next || '') === String(txn.fund_id || '')) return;
     try {
@@ -244,9 +239,9 @@ export default function TransactionsPage({ user }) {
         <div className="card mb-6">
           <h3 className="text-lg font-bold mb-2">Import from CSV</h3>
           <p className="text-sm text-gray-600 mb-4">
-            Download the file from the bank or Givelify, then upload it in StewardView. The bank file is cash. The Givelify file is funds.
+            Download the checking file from the bank, then upload it in StewardView. Deposits go to the General Fund. Givelify deposits (5/3 BANKCARD SYS) are categorized as Online Contributions.
           </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="max-w-xl">
             <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
               <h4 className="font-bold text-gray-900 mb-2">US Bank checking</h4>
               <ol className="text-sm text-gray-700 space-y-1.5 list-decimal list-inside">
@@ -257,17 +252,6 @@ export default function TransactionsPage({ user }) {
                 <li>In StewardView, open Bank → Import and upload that file</li>
               </ol>
               <Link to="/bank?tab=import" className="btn-primary text-sm inline-block mt-4">Open Bank import</Link>
-            </div>
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-              <h4 className="font-bold text-gray-900 mb-2">Givelify donations</h4>
-              <ol className="text-sm text-gray-700 space-y-1.5 list-decimal list-inside">
-                <li>Sign in to the church Givelify dashboard</li>
-                <li>Open <strong>Reports</strong>, then the <strong>Donations</strong> report</li>
-                <li>Set the <strong>date range</strong> you want</li>
-                <li>Export or download as <strong>CSV</strong></li>
-                <li>In StewardView, open Givelify → Import CSV and upload that file</li>
-              </ol>
-              <Link to="/givelify?tab=import" className="btn-primary text-sm inline-block mt-4">Open Givelify import</Link>
             </div>
           </div>
         </div>
@@ -334,7 +318,7 @@ export default function TransactionsPage({ user }) {
                 {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
               </select>
               <p className="text-xs text-gray-500 mt-1">
-                Defaults to General Fund. A Givelify bank deposit is labeled Various. Those gifts already went to funds when the giving file was imported.
+                Defaults to General Fund.
               </p>
             </div>
             <div>
@@ -422,17 +406,6 @@ export default function TransactionsPage({ user }) {
                     </td>
                     <td className="py-2 text-gray-600">
                       {(() => {
-                        const givelifyAuto = isGivelifyBankSettlement(txn);
-                        if (givelifyAuto) {
-                          return (
-                            <span
-                              className="inline-block text-xs font-medium bg-slate-100 text-slate-700 px-2 py-1 rounded"
-                              title="Givelify bank deposit. Funds already counted when the giving file was imported."
-                            >
-                              Various
-                            </span>
-                          );
-                        }
                         if (canEdit && !isCanceled) {
                           return (
                             <select

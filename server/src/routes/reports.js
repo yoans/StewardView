@@ -7,8 +7,6 @@ const { requireTenant } = require('../middleware/tenant');
 const { logAudit } = require('../models/auditLog');
 const { generateMonthlyReportPDF } = require('../reports/generateMonthlyReport');
 const { buildFundsBankReconciliation } = require('../utils/fundBank');
-const { givelifyMonthTotals } = require('../utils/budgetActuals');
-
 const REPORT_DIR = process.env.REPORT_DIR || path.join(__dirname, '..', '..', 'reports');
 
 // GET /api/reports/monthly?year=2026&month=3
@@ -138,62 +136,29 @@ router.get('/dashboard', authenticate, requireTenant, async (req, res) => {
     }
     const totalBankBalance = bankAccounts.reduce((s, a) => s + parseFloat(a.calculated_balance || 0), 0);
 
-    // Month income & expenses: bank/cash transactions + Givelify fund gifts/fees
     const monthIncome = await db('transactions')
       .where('type', 'income').where('status', '!=', 'void').where('tenant_id', req.tenantId)
       .whereBetween('date', [startDate, endDate])
-      .where(function () {
-        this.whereNotNull('bank_account_id')
-          .orWhere(function () {
-            this.whereNull('bank_account_id')
-              .andWhere((q) => {
-                q.whereNull('payee_payer').orWhere('payee_payer', '!=', 'Givelify');
-              })
-              .andWhere('description', 'not ilike', 'Givelify%');
-          });
-      })
       .sum('amount as total').first();
 
     const monthExpenses = await db('transactions')
       .where('type', 'expense').where('status', '!=', 'void').where('tenant_id', req.tenantId)
       .whereBetween('date', [startDate, endDate])
-      .where(function () {
-        this.whereNotNull('bank_account_id')
-          .orWhere(function () {
-            this.whereNull('bank_account_id')
-              .andWhere((q) => {
-                q.whereNull('payee_payer').orWhere('payee_payer', '!=', 'Givelify');
-              })
-              .andWhere('description', 'not ilike', 'Givelify%');
-          });
-      })
       .sum('amount as total').first();
 
-    const givelify = await givelifyMonthTotals(req.tenantId, startDate, endDate);
-    const income = (parseFloat(monthIncome.total) || 0) + givelify.income;
-    const expenses = (parseFloat(monthExpenses.total) || 0) + givelify.fees;
+    const income = parseFloat(monthIncome.total) || 0;
+    const expenses = parseFloat(monthExpenses.total) || 0;
 
     // Fund balances
     const funds = await db('funds').where({ is_active: true, tenant_id: req.tenantId });
     const totalFunds = funds.reduce((s, f) => s + (parseFloat(f.current_balance) || 0), 0);
     const funds_vs_bank = buildFundsBankReconciliation(funds, bankAccounts);
 
-    // Recent transactions (cash/bank activity only)
     const recentTransactions = await db('transactions')
       .leftJoin('categories', 'transactions.category_id', 'categories.id')
       .select('transactions.*', 'categories.name as category_name')
       .where('transactions.status', '!=', 'void')
       .where('transactions.tenant_id', req.tenantId)
-      .where(function () {
-        this.whereNotNull('transactions.bank_account_id')
-          .orWhere(function () {
-            this.whereNull('transactions.bank_account_id')
-              .andWhere((q) => {
-                q.whereNull('transactions.payee_payer').orWhere('transactions.payee_payer', '!=', 'Givelify');
-              })
-              .andWhere('transactions.description', 'not ilike', 'Givelify%');
-          });
-      })
       .orderBy('transactions.date', 'desc')
       .limit(10);
 
@@ -209,10 +174,6 @@ router.get('/dashboard', authenticate, requireTenant, async (req, res) => {
         income,
         expenses,
         net: income - expenses,
-        bank_income: parseFloat(monthIncome.total) || 0,
-        bank_expenses: parseFloat(monthExpenses.total) || 0,
-        givelify_income: givelify.income,
-        givelify_fees: givelify.fees,
       },
       funds,
       total_funds: Math.round(totalFunds * 100) / 100,
@@ -279,9 +240,8 @@ async function buildMonthlyReportData(year, month, tenantId, tenantName = 'Stewa
     .select('categories.name as category')
     .sum('transactions.amount as total');
 
-  const givelify = await givelifyMonthTotals(tenantId, startDate, endDate);
-  const totalIncome = incomeByCategory.reduce((s, c) => s + parseFloat(c.total || 0), 0) + givelify.income;
-  const totalExpenses = expenseByCategory.reduce((s, c) => s + parseFloat(c.total || 0), 0) + givelify.fees;
+  const totalIncome = incomeByCategory.reduce((s, c) => s + parseFloat(c.total || 0), 0);
+  const totalExpenses = expenseByCategory.reduce((s, c) => s + parseFloat(c.total || 0), 0);
 
   // Fund balances
   const funds = await db('funds').where({ is_active: true, tenant_id: tenantId });
