@@ -73,6 +73,7 @@ export const fundsAPI = {
   recurringList: () => api.get('/funds/recurring/list'),
   recurringCreate: (data) => api.post('/funds/recurring', data),
   recurringDelete: (id) => api.delete(`/funds/recurring/${id}`),
+  recurringRun: () => api.post('/funds/recurring/run'),
 };
 
 // ── Budgets ──────────────────────────────────────────────
@@ -94,6 +95,11 @@ export const bankAPI = {
   updateAccount: (id, data) => api.put(`/bank/accounts/${id}`, data),
   deactivateAccount: (id) => api.delete(`/bank/accounts/${id}`),
   importCsv: (formData) => api.post('/bank/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  connections: () => api.get('/bank/connections'),
+  connectSimplefin: (setup_token) => api.post('/bank/connections/simplefin', { setup_token }),
+  linkConnection: (id, links) => api.post(`/bank/connections/${id}/link`, { links }),
+  syncConnection: (id) => api.post(`/bank/connections/${id}/sync`),
+  disconnectConnection: (id) => api.delete(`/bank/connections/${id}`),
 };
 
 // ── Reports ──────────────────────────────────────────────

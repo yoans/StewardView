@@ -86,7 +86,11 @@ Needed only if you want paid self-service onboarding.
 
 ## Bank Transaction Import
 
-StewardView supports any bank that can export transactions as CSV. To use it:
+StewardView can pull posted transactions about once a day through [SimpleFIN Bridge](https://bridge.simplefin.org/simplefin/create), or from a CSV export.
+
+SimpleFIN is connected per church. An admin or treasurer opens SimpleFIN, links the bank there, and pastes the one-time setup token on **Bank Accounts → Import**. StewardView stores only the encrypted access token. It never sees the bank password. The daily job runs at 6:17 AM Central and skips a connection that already synced in the last 20 hours.
+
+CSV import still works for any bank:
 
 1. Add the bank account on the **Bank Accounts** page.
 2. Export transactions from online banking as CSV.
@@ -94,6 +98,10 @@ StewardView supports any bank that can export transactions as CSV. To use it:
 4. Review imported transactions on the **Transactions** page to assign categories and funds.
 
 The importer accepts common columns such as `date`, `posting_date`, `amount`, `debit`, `credit`, `description`, `memo`, `details`, `check_number`, and `notes`. Likely duplicate rows are skipped automatically.
+
+## Recurring fund transfers
+
+Recurring transfers run at 7:00 AM Central. A transfer posts only on the day it is scheduled. Earlier dates that did not run are skipped and are not filled in later. The source fund balance is compared as money, so a balance of `2100.00` is enough for a `500.00` transfer.
 
 ## Important Notes
 
