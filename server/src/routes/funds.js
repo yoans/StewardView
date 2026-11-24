@@ -3,6 +3,9 @@ const db = require('../models/db');
 const { authenticate, authorize } = require('../middleware/auth');
 const { requireTenant } = require('../middleware/tenant');
 const { logAudit } = require('../models/auditLog');
+const { toCents, centsToDecimal, moneyLt, formatMoney } = require('../utils/money');
+const { todayInTimeZone, initialNextRun } = require('../utils/dates');
+const { runRecurringTransfers } = require('../services/recurringTransfers');
 
 // GET /api/funds — list all funds with balances
 router.get('/', authenticate, requireTenant, async (req, res) => {
@@ -80,28 +83,31 @@ router.put('/:id', authenticate, requireTenant, authorize('admin', 'treasurer'),
 router.post('/:id/transfer', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
   try {
     const { to_fund_id, amount, description } = req.body;
+    const amountCents = toCents(amount);
     const fromFund = await db('funds').where({ id: req.params.id, tenant_id: req.tenantId }).first();
     const toFund = await db('funds').where({ id: to_fund_id, tenant_id: req.tenantId }).first();
     if (!fromFund || !toFund) return res.status(404).json({ error: 'Fund not found' });
-    if (fromFund.current_balance < amount) return res.status(400).json({ error: 'Insufficient fund balance' });
+    if (amountCents == null || amountCents <= 0) return res.status(400).json({ error: 'Amount must be positive' });
+    if (toCents(fromFund.current_balance) < amountCents) return res.status(400).json({ error: 'Insufficient fund balance' });
 
-    const date = new Date().toISOString().slice(0, 10);
+    const date = todayInTimeZone();
+    const amountValue = centsToDecimal(amountCents);
 
     // Debit from source
     await db('fund_transactions').insert({
-      fund_id: fromFund.id, type: 'transfer_out', amount, date,
+      fund_id: fromFund.id, type: 'transfer_out', amount: amountValue, date,
       description: description || `Transfer to ${toFund.name}`,
       created_by: req.user.id,
     });
-    await db('funds').where({ id: fromFund.id }).decrement('current_balance', amount);
+    await db('funds').where({ id: fromFund.id }).decrement('current_balance', amountValue);
 
     // Credit to destination
     await db('fund_transactions').insert({
-      fund_id: toFund.id, type: 'transfer_in', amount, date,
+      fund_id: toFund.id, type: 'transfer_in', amount: amountValue, date,
       description: description || `Transfer from ${fromFund.name}`,
       created_by: req.user.id,
     });
-    await db('funds').where({ id: toFund.id }).increment('current_balance', amount);
+    await db('funds').where({ id: toFund.id }).increment('current_balance', amountValue);
 
     await logAudit({
       entityType: 'fund', entityId: fromFund.id, action: 'transfer',
@@ -121,30 +127,32 @@ router.post('/:id/transfer', authenticate, requireTenant, authorize('admin', 'tr
 router.post('/:id/adjust', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
   try {
     const { amount, description, type } = req.body;
+    const amountCents = toCents(amount);
     // type: 'increase' or 'decrease'
-    if (!amount || amount <= 0) return res.status(400).json({ error: 'Amount must be positive' });
+    if (amountCents == null || amountCents <= 0) return res.status(400).json({ error: 'Amount must be positive' });
     if (!['increase', 'decrease'].includes(type)) return res.status(400).json({ error: 'Type must be increase or decrease' });
 
     const fund = await db('funds').where({ id: req.params.id, tenant_id: req.tenantId }).first();
     if (!fund) return res.status(404).json({ error: 'Fund not found' });
 
-    if (type === 'decrease' && fund.current_balance < amount) {
+    if (type === 'decrease' && toCents(fund.current_balance) < amountCents) {
       return res.status(400).json({ error: 'Insufficient fund balance' });
     }
 
-    const date = new Date().toISOString().slice(0, 10);
+    const date = todayInTimeZone();
+    const amountValue = centsToDecimal(amountCents);
     const fundTxnType = type === 'increase' ? 'adjustment_in' : 'adjustment_out';
 
     await db('fund_transactions').insert({
-      fund_id: fund.id, type: fundTxnType, amount, date,
+      fund_id: fund.id, type: fundTxnType, amount: amountValue, date,
       description: description || `Balance adjustment (${type})`,
       created_by: req.user.id,
     });
 
     if (type === 'increase') {
-      await db('funds').where({ id: fund.id }).increment('current_balance', amount);
+      await db('funds').where({ id: fund.id }).increment('current_balance', amountValue);
     } else {
-      await db('funds').where({ id: fund.id }).decrement('current_balance', amount);
+      await db('funds').where({ id: fund.id }).decrement('current_balance', amountValue);
     }
 
     await logAudit({
@@ -176,6 +184,22 @@ router.get('/:id/history', authenticate, requireTenant, async (req, res) => {
 
 // ── Recurring Transfers ───────────────────────────────────
 
+// POST /api/funds/recurring/run — post today's transfers only. Missed dates are skipped.
+router.post('/recurring/run', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
+  try {
+    const summary = await runRecurringTransfers({
+      db,
+      today: todayInTimeZone(),
+      tenantId: req.tenantId,
+      actor: { userId: req.user.id, userName: req.user.name, ipAddress: req.ip },
+    });
+    res.json(summary);
+  } catch (err) {
+    console.error('Run recurring transfers error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // GET /api/funds/recurring — list all recurring transfers for this tenant
 router.get('/recurring/list', authenticate, requireTenant, async (req, res) => {
   try {
@@ -186,10 +210,16 @@ router.get('/recurring/list', authenticate, requireTenant, async (req, res) => {
       .select(
         'recurring_transfers.*',
         'from_fund.name as from_fund_name',
+        'from_fund.current_balance as from_fund_balance',
         'to_fund.name as to_fund_name'
       )
       .orderBy('recurring_transfers.created_at', 'desc');
-    res.json(transfers);
+    res.json(transfers.map((transfer) => ({
+      ...transfer,
+      blocked_reason: transfer.is_active && moneyLt(transfer.from_fund_balance, transfer.amount)
+        ? `${transfer.from_fund_name} has ${formatMoney(transfer.from_fund_balance)}; this transfer needs ${formatMoney(transfer.amount)}.`
+        : null,
+    })));
   } catch (err) {
     console.error('List recurring transfers error:', err);
     res.status(500).json({ error: 'Server error' });
@@ -200,36 +230,30 @@ router.get('/recurring/list', authenticate, requireTenant, async (req, res) => {
 router.post('/recurring', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
   try {
     const { from_fund_id, to_fund_id, amount, description, frequency, day_of_month, day_of_week } = req.body;
-    if (!from_fund_id || !to_fund_id || !amount || amount <= 0) {
+    const amountCents = toCents(amount);
+    if (!from_fund_id || !to_fund_id || amountCents == null || amountCents <= 0) {
       return res.status(400).json({ error: 'from_fund_id, to_fund_id, and positive amount are required' });
     }
-    if (from_fund_id === to_fund_id) return res.status(400).json({ error: 'Cannot transfer to the same fund' });
+    if (Number(from_fund_id) === Number(to_fund_id)) return res.status(400).json({ error: 'Cannot transfer to the same fund' });
 
     const fromFund = await db('funds').where({ id: from_fund_id, tenant_id: req.tenantId }).first();
     const toFund = await db('funds').where({ id: to_fund_id, tenant_id: req.tenantId }).first();
     if (!fromFund || !toFund) return res.status(404).json({ error: 'Fund not found' });
 
     const freq = frequency || 'monthly';
-    // Calculate next run date
-    const now = new Date();
-    let nextRun;
-    if (freq === 'monthly') {
-      const dom = Math.min(Math.max(day_of_month || 1, 1), 28);
-      nextRun = new Date(now.getFullYear(), now.getMonth(), dom);
-      if (nextRun <= now) nextRun.setMonth(nextRun.getMonth() + 1);
-    } else {
-      // weekly
-      const dow = day_of_week != null ? day_of_week : 1; // default Monday
-      nextRun = new Date(now);
-      nextRun.setDate(now.getDate() + ((7 + dow - now.getDay()) % 7 || 7));
-    }
+    const nextRun = initialNextRun({
+      frequency: freq,
+      dayOfMonth: day_of_month,
+      dayOfWeek: day_of_week,
+      today: todayInTimeZone(),
+    });
 
     const [{ id }] = await db('recurring_transfers').insert({
-      from_fund_id, to_fund_id, amount, description,
+      from_fund_id, to_fund_id, amount: centsToDecimal(amountCents), description,
       frequency: freq,
-      day_of_month: freq === 'monthly' ? (day_of_month || 1) : null,
+      day_of_month: freq === 'monthly' ? (Math.min(Math.max(parseInt(day_of_month, 10) || 1, 1), 28)) : null,
       day_of_week: freq === 'weekly' ? (day_of_week != null ? day_of_week : 1) : null,
-      next_run_date: nextRun.toISOString().slice(0, 10),
+      next_run_date: nextRun,
       tenant_id: req.tenantId,
       created_by: req.user.id,
     }).returning('id');

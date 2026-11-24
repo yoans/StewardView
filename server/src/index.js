@@ -171,6 +171,7 @@ cron.schedule('0 2 * * *', async () => {
       'users', 'bank_accounts', 'categories', 'funds', 'transactions',
       'fund_transactions', 'budgets', 'audit_log',
       'monthly_reports', 'givelify_contributions', 'data_backups', 'app_settings',
+      'recurring_transfers', 'recurring_transfer_runs', 'bank_connections',
     ];
     const backupData = {};
     let totalRows = 0;
@@ -220,61 +221,28 @@ cron.schedule('0 */6 * * *', async () => {
   }
 });
 
-// ── Cron: Process recurring fund transfers daily at 7 AM ─
-cron.schedule('0 7 * * *', async () => {
+const { appTimeZone } = require('./utils/dates');
+
+async function runRecurringJob() {
+  const { runRecurringTransfers } = require('./services/recurringTransfers');
+  const { todayInTimeZone } = require('./utils/dates');
+  const summary = await runRecurringTransfers({ db, today: todayInTimeZone() });
+  console.log(`Recurring transfers: posted ${summary.posted_count || 0}, blocked ${summary.skipped_count || 0}, missed dates left alone ${summary.ignored_missed || 0}`);
+}
+
+// ── Cron: recurring fund transfers at 7 AM Central ──────
+// Only the date that is due today is posted. Older dates are skipped.
+cron.schedule('0 7 * * *', () => {
   console.log('Running recurring fund transfers...');
-  try {
-    const today = new Date().toISOString().slice(0, 10);
-    const due = await db('recurring_transfers')
-      .where({ is_active: true })
-      .where('next_run_date', '<=', today);
+  runRecurringJob().catch((err) => console.error('Recurring transfer cron error:', err));
+}, { timezone: appTimeZone() });
 
-    for (const rt of due) {
-      try {
-        const fromFund = await db('funds').where({ id: rt.from_fund_id }).first();
-        const toFund = await db('funds').where({ id: rt.to_fund_id }).first();
-        if (!fromFund || !toFund) continue;
-        if (fromFund.current_balance < rt.amount) {
-          console.warn(`Skipping recurring transfer ${rt.id}: insufficient balance in ${fromFund.name}`);
-          continue;
-        }
-
-        // Execute the transfer
-        await db('fund_transactions').insert({
-          fund_id: fromFund.id, type: 'transfer_out', amount: rt.amount, date: today,
-          description: rt.description || `Recurring transfer to ${toFund.name}`,
-          created_by: rt.created_by,
-        });
-        await db('funds').where({ id: fromFund.id }).decrement('current_balance', rt.amount);
-
-        await db('fund_transactions').insert({
-          fund_id: toFund.id, type: 'transfer_in', amount: rt.amount, date: today,
-          description: rt.description || `Recurring transfer from ${fromFund.name}`,
-          created_by: rt.created_by,
-        });
-        await db('funds').where({ id: toFund.id }).increment('current_balance', rt.amount);
-
-        // Advance next_run_date
-        const next = new Date(rt.next_run_date);
-        if (rt.frequency === 'monthly') {
-          next.setMonth(next.getMonth() + 1);
-        } else {
-          next.setDate(next.getDate() + 7);
-        }
-        await db('recurring_transfers').where({ id: rt.id }).update({
-          next_run_date: next.toISOString().slice(0, 10),
-          last_run_date: today,
-        });
-
-        console.log(`Recurring transfer ${rt.id}: ${rt.amount} from ${fromFund.name} to ${toFund.name}`);
-      } catch (transferErr) {
-        console.error(`Recurring transfer ${rt.id} failed:`, transferErr.message);
-      }
-    }
-  } catch (err) {
-    console.error('Recurring transfer cron error:', err);
-  }
-});
+// ── Cron: SimpleFIN bank sync once a day, off the top of the hour ─
+cron.schedule('17 6 * * *', () => {
+  console.log('Running daily bank sync...');
+  const { syncBankConnections } = require('./services/bankSync');
+  syncBankConnections({ force: false }).catch((err) => console.error('Bank sync cron error:', err));
+}, { timezone: appTimeZone() });
 
 // ── Serve React client in production ─────────────────────
 const clientBuildPath = path.join(__dirname, '..', '..', 'client', 'build');
@@ -320,6 +288,9 @@ async function initializeApp() {
       await db.migrate.latest();
       console.log('Migrations complete.');
       appReady = true;
+      runRecurringJob().catch((err) => console.error('Recurring transfer startup error:', err));
+      const { syncBankConnections } = require('./services/bankSync');
+      syncBankConnections({ force: false }).catch((err) => console.error('Bank sync startup error:', err));
       return;
     } catch (err) {
       lastError = err;
