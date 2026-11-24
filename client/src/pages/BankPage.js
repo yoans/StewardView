@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { bankAPI } from '../services/api';
 import FundsVsBankBanner from '../components/FundsVsBankBanner';
+import SimpleFinSync from '../components/SimpleFinSync';
 
 const fmt = (n) => parseFloat(n || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
@@ -230,8 +231,17 @@ function AccountCard({ acc, canManage, onEdit, onDeactivate }) {
         {acc.opening_balance_date && (
           <p className="text-xs text-gray-400">Starting as of {String(acc.opening_balance_date).slice(0, 10)}</p>
         )}
+        {acc.external_account_id && (
+          <p className="text-xs text-green-700">Posted transactions sync daily.</p>
+        )}
+        {acc.reported_balance != null && (
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-500">Bank reported</span>
+            <span className="text-gray-700">{fmt(acc.reported_balance)}</span>
+          </div>
+        )}
         <p className="text-xs text-gray-500 pt-1">
-          Not a live bank feed — compare to your statement when reconciling.
+          Book balance is still calculated from the starting balance and imported transactions.
         </p>
       </div>
       {canManage && (
@@ -385,6 +395,9 @@ export default function BankPage({ user }) {
       {/* ── IMPORT CSV TAB ── */}
       {tab === 'import' && (
         <div className="space-y-4">
+          {canManage && (
+            <SimpleFinSync accounts={accounts} onChanged={loadData} />
+          )}
           {canManage ? (
             <CsvImportPanel
               accounts={accounts}
@@ -417,6 +430,14 @@ export default function BankPage({ user }) {
       {/* ── SETUP GUIDE TAB ── */}
       {tab === 'setup' && (
         <div className="space-y-4">
+          <div className="card bg-white border border-gray-200">
+            <h3 className="font-bold text-gray-900 mb-2">Daily sync with SimpleFIN</h3>
+            <p className="text-sm text-gray-700">
+              On Bank → Import, connect SimpleFIN Bridge if you want posted transactions pulled about once a day.
+              StewardView does not store the bank login. A CSV export remains available for any account.
+            </p>
+          </div>
+
           <div className="card bg-indigo-50 border border-indigo-200">
             <h3 className="font-bold text-indigo-900 mb-3">🏦 Import Workflow</h3>
             <p className="text-sm text-indigo-800 mb-3">Use the same repeatable workflow each statement period:</p>

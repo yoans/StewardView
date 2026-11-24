@@ -18,6 +18,8 @@ export default function FundsPage({ user }) {
   const [transferForm, setTransferForm] = useState({ to_fund_id: '', amount: '', description: '' });
   const [adjustForm, setAdjustForm] = useState({ type: 'increase', amount: '', description: '' });
   const [recurringForm, setRecurringForm] = useState({ from_fund_id: '', to_fund_id: '', amount: '', description: '', frequency: 'monthly', day_of_month: 1 });
+  const [runMessage, setRunMessage] = useState('');
+  const [running, setRunning] = useState(false);
   const canEdit = ['admin', 'treasurer'].includes(user.role);
 
   const loadFunds = async () => {
@@ -104,6 +106,30 @@ export default function FundsPage({ user }) {
     } catch (err) { alert(err.response?.data?.error || 'Failed to create recurring transfer'); }
   };
 
+  const handleRunRecurring = async () => {
+    setRunning(true);
+    setRunMessage('');
+    try {
+      const res = await fundsAPI.recurringRun();
+      const data = res.data;
+      if (data.posted_count) {
+        setRunMessage(`Posted ${data.posted_count} transfer${data.posted_count === 1 ? '' : 's'} for today.`);
+      } else if (data.skipped?.length) {
+        setRunMessage(data.skipped[0].message);
+      } else if (data.ignored_missed) {
+        setRunMessage('Missed dates were left alone. Nothing was due today.');
+      } else {
+        setRunMessage('Nothing is due today.');
+      }
+      loadRecurring();
+      loadFunds();
+      loadRecon();
+    } catch (err) {
+      setRunMessage(err.response?.data?.error || 'Could not run transfers');
+    }
+    setRunning(false);
+  };
+
   const handleDeleteRecurring = async (id) => {
     if (!window.confirm('Deactivate this recurring transfer?')) return;
     try {
@@ -168,8 +194,18 @@ export default function FundsPage({ user }) {
       {/* Recurring Transfers Section */}
       {showRecurring && canEdit && (
         <div className="card mb-6">
-          <h3 className="text-lg font-bold mb-4">Recurring Fund Transfers</h3>
-          <p className="text-sm text-gray-500 mb-4">Set up automatic monthly or weekly transfers between funds. Transfers run daily at 7 AM when due.</p>
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
+            <div>
+              <h3 className="text-lg font-bold">Recurring Fund Transfers</h3>
+              <p className="text-sm text-gray-500 mt-1">
+                Each transfer posts on its scheduled day at 7:00 AM Central. Dates that already passed are skipped and are not filled in later.
+              </p>
+            </div>
+            <button type="button" className="btn-secondary text-sm whitespace-nowrap" onClick={handleRunRecurring} disabled={running}>
+              {running ? 'Checking...' : 'Run today\'s transfers'}
+            </button>
+          </div>
+          {runMessage && <p className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded px-3 py-2 mb-4">{runMessage}</p>}
 
           <form onSubmit={handleCreateRecurring} className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-4">
             <div>
@@ -212,17 +248,19 @@ export default function FundsPage({ user }) {
                   <th className="pb-2">Amount</th>
                   <th className="pb-2">Frequency</th>
                   <th className="pb-2">Next Run</th>
+                  <th className="pb-2">Status</th>
                   <th className="pb-2"></th>
                 </tr>
               </thead>
               <tbody>
                 {recurringTransfers.filter(rt => rt.is_active).map(rt => (
-                  <tr key={rt.id} className="border-b last:border-0">
+                  <tr key={rt.id} className="border-b last:border-0 align-top">
                     <td className="py-2">{rt.from_fund_name}</td>
                     <td className="py-2">{rt.to_fund_name}</td>
                     <td className="py-2 font-medium">{fmt(rt.amount)}</td>
                     <td className="py-2 text-gray-600">{rt.frequency} (day {rt.day_of_month || rt.day_of_week})</td>
                     <td className="py-2 text-gray-600">{formatDate(rt.next_run_date)}</td>
+                    <td className="py-2 text-xs text-red-700 max-w-xs">{rt.last_error || rt.blocked_reason || 'Scheduled'}</td>
                     <td className="py-2">
                       <button onClick={() => handleDeleteRecurring(rt.id)} className="text-red-500 hover:text-red-700 text-xs">Remove</button>
                     </td>

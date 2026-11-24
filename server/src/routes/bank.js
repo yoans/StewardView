@@ -5,8 +5,8 @@ const { requireTenant } = require('../middleware/tenant');
 const { logAudit } = require('../models/auditLog');
 const multer = require('multer');
 const { parse } = require('csv-parse');
-const { v4: uuidv4 } = require('uuid');
-const { applyFundMovement, buildFundsBankReconciliation, resolveExpenseFundId, getGeneralFund } = require('../utils/fundBank');
+const { buildFundsBankReconciliation } = require('../utils/fundBank');
+const { importClearedTransaction } = require('../services/bankImport');
 
 // Multer: memory storage, CSV only, 5 MB limit
 const upload = multer({
@@ -166,20 +166,6 @@ function resolveCashMovement(row) {
   return { amount, type, rawAmount, checkNumberFromTxn: checkNumber };
 }
 
-/**
- * Givelify ACH deposits post as "5/3 BANKCARD SYS" (Fifth Third is their card
- * processor). Early setup may show "Givelify, LLC". Used only to pick the
- * Online Contributions category.
- */
-function looksLikeGivelifySettlement(...parts) {
-  const t = parts.filter(Boolean).join(' ').toLowerCase();
-  if (!t) return false;
-  if (t.includes('givelify')) return true;
-  if (/5\s*\/\s*3/.test(t) && /bankcard/.test(t)) return true;
-  if (/fifth\s*thirds?/.test(t) && /bankcard|vantiv|worldpay/.test(t)) return true;
-  return false;
-}
-
 async function sumBankMovements(tenantId, bankAccountId) {
   const income = await db('transactions')
     .where({ tenant_id: tenantId, bank_account_id: bankAccountId, type: 'income' })
@@ -312,79 +298,20 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
           null;
         const notes = String(getValue(row, ['notes', 'note'])).trim() || null;
 
-        // Every bank row lands in the General Fund; reassign on Transactions if needed.
-        let fundId = null;
-        let categoryId = null;
-        const rowNotes = notes;
-
-        if (type === 'expense') {
-          try {
-            fundId = await resolveExpenseFundId(req.tenantId, null);
-          } catch (e) {
-            errors.push(`Row ${i + 2}: ${e.message}`);
-            skipped++;
-            continue;
-          }
-        } else if (type === 'income') {
-          const general = await getGeneralFund(req.tenantId);
-          if (general) fundId = general.id;
-          if (looksLikeGivelifySettlement(description, payee)) {
-            const onlineCat = await db('categories')
-              .where({ tenant_id: req.tenantId, type: 'income', is_active: true, name: 'Online Contributions' })
-              .first();
-            if (onlineCat) categoryId = onlineCat.id;
-          }
-        }
-
-        const duplicate = await db('transactions')
-          .where({
-            tenant_id: req.tenantId,
-            bank_account_id: account.id,
-            date: parsedDate,
-            type,
-            amount,
-            description,
-          })
-          .modify((query) => {
-            if (checkNumber) query.where('check_number', checkNumber);
-          })
-          .first();
-
-        if (duplicate) { skipped++; continue; }
-
-        await db.transaction(async (trx) => {
-          const [{ id: txnId }] = await trx('transactions').insert({
-            ref_number: `IMP-${uuidv4().slice(0, 8).toUpperCase()}`,
-            type,
-            amount,
-            date: parsedDate,
-            description,
-            payee_payer: payee,
-            check_number: checkNumber,
-            bank_account_id: account.id,
-            fund_id: fundId,
-            category_id: categoryId,
-            status: 'cleared',
-            notes: rowNotes,
-            created_by: req.user.id,
-            tenant_id: req.tenantId,
-          }).returning('id');
-
-          if (fundId) {
-            await applyFundMovement({
-              fundId,
-              transactionId: txnId,
-              type,
-              amount,
-              date: parsedDate,
-              description,
-              payeePayer: payee,
-              userId: req.user.id,
-              tenantId: req.tenantId,
-              trx,
-            });
-          }
+        const outcome = await importClearedTransaction({
+          tenantId: req.tenantId,
+          userId: req.user.id,
+          account,
+          date: parsedDate,
+          description,
+          payee,
+          amount,
+          type,
+          checkNumber,
+          notes,
+          source: 'csv',
         });
+        if (outcome.status === 'duplicate') { skipped++; continue; }
 
         imported++;
         if (type === 'income') incomeImported += amount;
@@ -563,5 +490,7 @@ router.delete('/accounts/:id', authenticate, requireTenant, authorize('admin', '
     res.status(500).json({ error: 'Failed to remove account' });
   }
 });
+
+router.use('/connections', require('./bankConnections'));
 
 module.exports = router;
