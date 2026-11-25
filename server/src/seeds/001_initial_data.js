@@ -53,7 +53,7 @@ exports.seed = async function (knex) {
   // ── Categories ────────────────────────────────────────
   const incomeCategories = [
     { id: 1, name: 'Tithes & Offerings', type: 'income', description: 'General weekly contributions' },
-    { id: 2, name: 'Directed Contributions', type: 'income', description: 'Funds given for specific purposes' },
+    { id: 2, name: 'Other Income', type: 'income', description: 'Income that is not a regular contribution' },
     { id: 3, name: 'Special Events', type: 'income', description: 'VBS, fundraisers, etc.' },
     { id: 4, name: 'Interest Income', type: 'income', description: 'Bank interest' },
   ];
@@ -75,11 +75,11 @@ exports.seed = async function (knex) {
 
   // ── Earmarked Funds ───────────────────────────────────
   await knex('funds').insert([
-    { id: 1, name: 'General Fund', description: 'Unrestricted general operating fund', current_balance: 0, is_restricted: false },
-    { id: 2, name: 'Missions Fund', description: 'Designated for missionary support', current_balance: 0, is_restricted: true },
-    { id: 3, name: 'Building Fund', description: 'Designated for building repairs and improvements', current_balance: 0, is_restricted: true },
-    { id: 4, name: 'Benevolence Fund', description: 'Designated for member/community assistance', current_balance: 0, is_restricted: true },
-    { id: 5, name: 'Youth Fund', description: 'Designated for youth activities and camp', current_balance: 0, is_restricted: true },
+    { id: 1, name: 'General Fund', description: 'Operating fund. Gifts land here.', current_balance: 0, is_restricted: false },
+    { id: 2, name: 'Missions Fund', description: 'Set aside for missionary support', current_balance: 0, is_restricted: false },
+    { id: 3, name: 'Building Fund', description: 'Set aside for building repairs and improvements', current_balance: 0, is_restricted: false },
+    { id: 4, name: 'Benevolence Fund', description: 'Set aside for member and community assistance', current_balance: 0, is_restricted: false },
+    { id: 5, name: 'Youth Fund', description: 'Set aside for youth activities', current_balance: 0, is_restricted: false },
   ]);
 
   // Operational defaults stop here: no bank accounts, transactions, budgets,

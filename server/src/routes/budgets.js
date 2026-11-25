@@ -3,7 +3,7 @@ const db = require('../models/db');
 const { authenticate, authorize } = require('../middleware/auth');
 const { requireTenant } = require('../middleware/tenant');
 const { logAudit } = require('../models/auditLog');
-const { categoryActualsMap } = require('../utils/budgetActuals');
+const { budgetSnapshot, currentMonth } = require('../utils/budgetReport');
 
 /** Last calendar day of month as YYYY-MM-DD (no UTC shift). */
 function monthEndDate(year, month) {
@@ -38,44 +38,19 @@ router.get('/vs-actual', authenticate, requireTenant, async (req, res) => {
 
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
     const endDate = monthEndDate(year, month);
-
-    // Get budgets for the month
-    const budgets = await db('budgets')
-      .leftJoin('categories', 'budgets.category_id', 'categories.id')
-      .where({ 'budgets.year': year, 'budgets.month': month, 'budgets.tenant_id': req.tenantId })
-      .select('budgets.*', 'categories.name as category_name', 'categories.type as category_type');
-
-    const actualMap = await categoryActualsMap(req.tenantId, startDate, endDate);
-
-    const comparison = budgets.map(b => ({
-      category_id: b.category_id,
-      category_name: b.category_name,
-      category_type: b.category_type,
-      budgeted: parseFloat(b.budgeted_amount),
-      actual: actualMap[b.category_id] || 0,
-      variance: (actualMap[b.category_id] || 0) - parseFloat(b.budgeted_amount),
-      variance_pct: b.budgeted_amount > 0
-        ? (((actualMap[b.category_id] || 0) - parseFloat(b.budgeted_amount)) / parseFloat(b.budgeted_amount) * 100).toFixed(1)
-        : 0,
-    }));
-
-    const totalBudgetedIncome = comparison.filter(c => c.category_type === 'income').reduce((s, c) => s + c.budgeted, 0);
-    const totalActualIncome = comparison.filter(c => c.category_type === 'income').reduce((s, c) => s + c.actual, 0);
-    const totalBudgetedExpense = comparison.filter(c => c.category_type === 'expense').reduce((s, c) => s + c.budgeted, 0);
-    const totalActualExpense = comparison.filter(c => c.category_type === 'expense').reduce((s, c) => s + c.actual, 0);
-
-    res.json({
-      year, month,
-      line_items: comparison,
-      summary: {
-        total_budgeted_income: totalBudgetedIncome,
-        total_actual_income: totalActualIncome,
-        total_budgeted_expense: totalBudgetedExpense,
-        total_actual_expense: totalActualExpense,
-        budgeted_net: totalBudgetedIncome - totalBudgetedExpense,
-        actual_net: totalActualIncome - totalActualExpense,
-      },
+    const snapshot = await budgetSnapshot({
+      tenantId: req.tenantId,
+      year,
+      startDate,
+      endDate,
+      budgetQuery: db('budgets')
+        .where({ year, month, tenant_id: req.tenantId })
+        .groupBy('category_id')
+        .select('category_id')
+        .sum('budgeted_amount as budgeted'),
     });
+
+    res.json({ ...snapshot, month });
   } catch (err) {
     console.error('Budget vs actual error:', err);
     res.status(500).json({ error: 'Server error' });
@@ -208,37 +183,68 @@ router.post('/copy', authenticate, requireTenant, authorize('admin', 'treasurer'
   }
 });
 
+// POST /api/budgets/fill-year — use one month as the plan for every month of that year
+router.post('/fill-year', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
+  try {
+    const year = parseInt(req.body.year, 10);
+    const month = parseInt(req.body.month, 10);
+    if (!year || month < 1 || month > 12) return res.status(400).json({ error: 'Choose a year and month' });
+
+    const source = await db('budgets').where({ year, month, tenant_id: req.tenantId });
+    if (!source.length) return res.status(404).json({ error: 'Set this month before copying it to the rest of the year' });
+
+    await db.transaction(async (trx) => {
+      await trx('budgets').where({ year, tenant_id: req.tenantId }).whereNot({ month }).del();
+      const copies = [];
+      for (let target = 1; target <= 12; target += 1) {
+        if (target === month) continue;
+        source.forEach((line) => {
+          copies.push({
+            year,
+            month: target,
+            category_id: line.category_id,
+            budgeted_amount: line.budgeted_amount,
+            notes: `Same plan as month ${month}`,
+            created_by: req.user.id,
+            tenant_id: req.tenantId,
+          });
+        });
+      }
+      if (copies.length) await trx('budgets').insert(copies);
+    });
+
+    res.json({ message: `${MONTHS[month] || 'This month'} is now the plan for all of ${year}` });
+  } catch (err) {
+    console.error('Fill year budget error:', err);
+    res.status(500).json({ error: 'Could not copy the plan' });
+  }
+});
+
+const MONTHS = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
 // GET /api/budgets/ytd?year=2026
 router.get('/ytd', authenticate, requireTenant, async (req, res) => {
   try {
     const year = parseInt(req.query.year) || new Date().getFullYear();
-    const currentMonth = new Date().getMonth() + 1;
-
+    const throughMonth = year === new Date().getFullYear() ? currentMonth() : 12;
     const startDate = `${year}-01-01`;
-    const endDate = monthEndDate(year, currentMonth);
+    const endDate = monthEndDate(year, throughMonth);
+    const snapshot = await budgetSnapshot({
+      tenantId: req.tenantId,
+      year,
+      startDate,
+      endDate,
+      monthsInPlan: throughMonth,
+      budgetQuery: db('budgets')
+        .where({ year, tenant_id: req.tenantId })
+        .where('month', '<=', throughMonth)
+        .where('month', '>', 0)
+        .groupBy('category_id')
+        .select('category_id')
+        .sum('budgeted_amount as budgeted'),
+    });
 
-    // YTD budgeted (sum months 1 through current)
-    const ytdBudgets = await db('budgets')
-      .leftJoin('categories', 'budgets.category_id', 'categories.id')
-      .where('budgets.year', year)
-      .where('budgets.month', '<=', currentMonth)
-      .where('budgets.tenant_id', req.tenantId)
-      .groupBy('budgets.category_id', 'categories.name', 'categories.type')
-      .select('budgets.category_id', 'categories.name as category_name', 'categories.type as category_type')
-      .sum('budgets.budgeted_amount as ytd_budgeted');
-
-    const actualMap = await categoryActualsMap(req.tenantId, startDate, endDate);
-
-    const comparison = ytdBudgets.map(b => ({
-      category_id: b.category_id,
-      category_name: b.category_name,
-      category_type: b.category_type,
-      ytd_budgeted: parseFloat(b.ytd_budgeted),
-      ytd_actual: actualMap[b.category_id] || 0,
-      ytd_variance: (actualMap[b.category_id] || 0) - parseFloat(b.ytd_budgeted),
-    }));
-
-    res.json({ year, through_month: currentMonth, line_items: comparison });
+    res.json({ ...snapshot, through_month: throughMonth });
   } catch (err) {
     console.error('YTD budget error:', err);
     res.status(500).json({ error: 'Server error' });

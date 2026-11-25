@@ -44,6 +44,8 @@ export const authAPI = {
   createUser: (data) => api.post('/auth/users', data),
   updateUser: (id, data) => api.put(`/auth/users/${id}`, data),
   resendInvite: (id) => api.post(`/auth/users/${id}/resend-invite`),
+  deleteInvite: (id) => api.delete(`/auth/users/${id}/invite`),
+  sendPasswordReset: (id) => api.post(`/auth/users/${id}/send-reset`),
   deactivateUser: (id) => api.delete(`/auth/users/${id}`),
   changePassword: (data) => api.post('/auth/change-password', data),
   deleteAccount: () => api.delete('/auth/me'),
@@ -64,6 +66,7 @@ export const transactionsAPI = {
 // ── Funds ────────────────────────────────────────────────
 export const fundsAPI = {
   list: () => api.get('/funds'),
+  balances: (windowId) => api.get('/funds/balances', { params: { window: windowId } }),
   get: (id) => api.get(`/funds/${id}`),
   create: (data) => api.post('/funds', data),
   update: (id, data) => api.put(`/funds/${id}`, data),
@@ -84,6 +87,7 @@ export const budgetsAPI = {
   update: (id, data) => api.put(`/budgets/${id}`, data),
   delete: (id) => api.delete(`/budgets/${id}`),
   copy: (data) => api.post('/budgets/copy', data),
+  fillYear: (data) => api.post('/budgets/fill-year', data),
   ytd: (year) => api.get('/budgets/ytd', { params: { year } }),
 };
 
@@ -124,6 +128,11 @@ export const categoriesAPI = {
   update: (id, data) => api.put(`/categories/${id}`, data),
   remove: (id) => api.delete(`/categories/${id}`),
   ensureDefaults: () => api.post('/categories/ensure-defaults'),
+  rules: () => api.get('/categories/rules'),
+  createRule: (data) => api.post('/categories/rules', data),
+  removeRule: (id) => api.delete(`/categories/rules/${id}`),
+  applyRules: () => api.post('/categories/rules/apply'),
+  seedRules: () => api.post('/categories/rules/defaults'),
 };
 
 // ── Backups ──────────────────────────────────────────────

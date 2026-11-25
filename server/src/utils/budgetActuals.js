@@ -7,6 +7,7 @@ async function categoryActualsMap(tenantId, startDate, endDate) {
   const bankActuals = await db('transactions')
     .where('status', '!=', 'void')
     .where('tenant_id', tenantId)
+    .whereNot('type', 'transfer')
     .whereBetween('date', [startDate, endDate])
     .whereNotNull('category_id')
     .groupBy('category_id')

@@ -7,6 +7,7 @@ const multer = require('multer');
 const { parse } = require('csv-parse');
 const { buildFundsBankReconciliation } = require('../utils/fundBank');
 const { importClearedTransaction } = require('../services/bankImport');
+const { applyCategoryRules } = require('../services/applyCategoryRules');
 
 // Multer: memory storage, CSV only, 5 MB limit
 const upload = multer({
@@ -321,6 +322,8 @@ router.post('/import', authenticate, requireTenant, authorize('admin', 'treasure
         skipped++;
       }
     }
+
+    await applyCategoryRules(req.tenantId).catch((err) => console.error('Category rules after import:', err.message));
 
     const decorated = await decorateAccount(
       await db('bank_accounts').where({ id: account.id }).first(),

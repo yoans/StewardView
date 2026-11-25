@@ -2,6 +2,7 @@ const db = require('../models/db');
 const { logAudit } = require('../models/auditLog');
 const { decryptSecret, fetchAccounts, publicAccount } = require('./simplefin');
 const { importClearedTransaction } = require('./bankImport');
+const { applyCategoryRules } = require('./applyCategoryRules');
 const { addDays, isoDate, isoToUnixStart, todayInTimeZone, unixToIsoDate } = require('../utils/dates');
 const { toCents, centsToDecimal } = require('../utils/money');
 
@@ -155,6 +156,8 @@ async function syncConnection(connection, { force = false, actor = null, today =
     last_sync_status: status,
     last_sync_error: errors.length ? errors.slice(0, 8).join(' ').slice(0, 2000) : null,
   });
+
+  await applyCategoryRules(connection.tenant_id).catch((err) => console.error('Category rules after sync:', err.message));
 
   if (imported || errors.length) {
     try {

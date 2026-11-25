@@ -4,6 +4,9 @@ const { authenticate, authorize } = require('../middleware/auth');
 const { requireTenant } = require('../middleware/tenant');
 const { logAudit } = require('../models/auditLog');
 const { CHURCH_CATEGORIES } = require('../utils/defaultCategories');
+const { loadTransferCoverage } = require('../utils/budgetReport');
+const { applyCategoryRules } = require('../services/applyCategoryRules');
+const { rulesForTenant, buildRuleRows } = require('../services/categoryRules');
 
 function orderCategories(query) {
   return query.orderBy([
@@ -22,7 +25,17 @@ router.get('/', authenticate, requireTenant, async (req, res) => {
       query = query.where({ is_active: true });
     }
     if (type) query = query.where({ type });
-    res.json(await orderCategories(query));
+    const rows = await orderCategories(query);
+    const coverage = await loadTransferCoverage(req.tenantId);
+    res.json(rows.map((row) => {
+      const cover = coverage.get(Number(row.id));
+      return {
+        ...row,
+        covered_by_transfer: Boolean(cover),
+        transfer_amount: cover ? cover.amount : null,
+        transfer_fund: cover ? cover.fund_name : null,
+      };
+    }));
   } catch (err) {
     console.error('Categories list error:', err);
     res.status(500).json({ error: 'Server error' });
@@ -107,6 +120,7 @@ router.post('/ensure-defaults', authenticate, requireTenant, authorize('admin', 
           type: def.type,
           description: def.description,
           sort_order: def.sort_order,
+          group_name: def.group_name,
           is_active: true,
           tenant_id: req.tenantId,
         });
@@ -116,6 +130,7 @@ router.post('/ensure-defaults', authenticate, requireTenant, authorize('admin', 
           is_active: true,
           description: def.description,
           sort_order: def.sort_order,
+          group_name: def.group_name,
           type: def.type,
           updated_at: new Date().toISOString(),
         });
@@ -123,6 +138,7 @@ router.post('/ensure-defaults', authenticate, requireTenant, authorize('admin', 
       } else {
         await db('categories').where({ id: hit.id }).update({
           sort_order: def.sort_order,
+          group_name: def.group_name,
           description: def.description,
           updated_at: new Date().toISOString(),
         });
@@ -141,6 +157,84 @@ router.post('/ensure-defaults', authenticate, requireTenant, authorize('admin', 
   } catch (err) {
     console.error('Ensure defaults error:', err);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.get('/rules', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
+  try {
+    const rules = await db('category_rules')
+      .leftJoin('categories', 'category_rules.category_id', 'categories.id')
+      .where('category_rules.tenant_id', req.tenantId)
+      .select('category_rules.*', 'categories.name as category_name')
+      .orderBy('category_rules.priority');
+    res.json(rules);
+  } catch (err) {
+    console.error('List category rules error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/rules', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
+  try {
+    const pattern = String(req.body.pattern || '').trim();
+    const categoryId = parseInt(req.body.category_id, 10);
+    if (!pattern) return res.status(400).json({ error: 'Say what the description contains' });
+    const category = await db('categories').where({ id: categoryId, tenant_id: req.tenantId, is_active: true }).first();
+    if (!category) return res.status(404).json({ error: 'Category not found' });
+    const [{ id }] = await db('category_rules').insert({
+      tenant_id: req.tenantId,
+      pattern: pattern.slice(0, 120),
+      match_mode: req.body.match_mode === 'exact' ? 'exact' : 'contains',
+      transaction_type: category.type,
+      min_amount: req.body.min_amount === '' || req.body.min_amount == null ? null : req.body.min_amount,
+      max_amount: req.body.max_amount === '' || req.body.max_amount == null ? null : req.body.max_amount,
+      category_id: category.id,
+      priority: 200,
+      is_active: true,
+    }).returning('id');
+    const row = await db('category_rules').where({ id }).first();
+    res.status(201).json(row);
+  } catch (err) {
+    console.error('Create category rule error:', err);
+    res.status(500).json({ error: 'Could not save that rule' });
+  }
+});
+
+router.delete('/rules/:id', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
+  try {
+    const deleted = await db('category_rules').where({ id: req.params.id, tenant_id: req.tenantId }).del();
+    if (!deleted) return res.status(404).json({ error: 'Rule not found' });
+    res.json({ message: 'Rule removed' });
+  } catch (err) {
+    console.error('Delete category rule error:', err);
+    res.status(500).json({ error: 'Could not remove that rule' });
+  }
+});
+
+router.post('/rules/apply', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
+  try {
+    const result = await applyCategoryRules(req.tenantId);
+    res.json({ message: `Categorized ${result.updated} transaction${result.updated === 1 ? '' : 's'}`, ...result });
+  } catch (err) {
+    console.error('Apply category rules error:', err);
+    res.status(500).json({ error: 'Could not apply the rules' });
+  }
+});
+
+router.post('/rules/defaults', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
+  try {
+    const existing = await db('category_rules').where({ tenant_id: req.tenantId }).count('* as c').first();
+    if ((parseInt(existing.c, 10) || 0) > 0) {
+      return res.json({ message: 'Rules are already set', added: 0 });
+    }
+    const cats = await db('categories').where({ tenant_id: req.tenantId, is_active: true }).select('id', 'name');
+    const idByName = new Map(cats.map((cat) => [cat.name.toLowerCase(), cat.id]));
+    const rows = buildRuleRows(rulesForTenant(req.tenantId), req.tenantId, idByName);
+    if (rows.length) await db('category_rules').insert(rows);
+    res.json({ message: 'Standard rules added', added: rows.length });
+  } catch (err) {
+    console.error('Seed category rules error:', err);
+    res.status(500).json({ error: 'Could not add the standard rules' });
   }
 });
 
