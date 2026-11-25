@@ -132,11 +132,13 @@ app.use('/api/onboarding', onboardingRoutes);
 // Serve the public landing/marketing page
 const landingPath = path.join(__dirname, '..', '..', 'landing');
 if (fs.existsSync(landingPath)) {
+  // Elder briefings are shared locally only.
+  app.use('/landing/elders-briefing.html', (req, res) => res.status(404).end());
+  app.use('/landing/budget-briefing.html', (req, res) => res.status(404).end());
   app.use('/landing', express.static(landingPath));
   app.get('/', (req, res) => res.sendFile(path.join(landingPath, 'index.html')));
   app.get('/privacy', (req, res) => res.sendFile(path.join(landingPath, 'privacy.html')));
   app.get('/terms', (req, res) => res.sendFile(path.join(landingPath, 'terms.html')));
-  app.get('/elders-briefing', (req, res) => res.sendFile(path.join(landingPath, 'elders-briefing.html')));
 }
 
 // Legacy app URLs now live under /app

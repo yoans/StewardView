@@ -12,3 +12,5 @@ client/build/
 coverage/
 *.log
 .DS_Store
+landing/elders-briefing.html
+landing/budget-briefing.html
