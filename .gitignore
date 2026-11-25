@@ -14,3 +14,4 @@ coverage/
 .DS_Store
 landing/elders-briefing.html
 landing/budget-briefing.html
+server/tenant-exports/

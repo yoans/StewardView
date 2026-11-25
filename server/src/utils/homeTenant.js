@@ -3,13 +3,11 @@
  * Workbook-specific setup (category renames, bank rules for its own payees)
  * applies only to it; every other organization gets generic defaults.
  *
- * Set HOME_TENANT_ID to override. Defaults to 1, the tenant that pre-existing
- * data was assigned to when multi-tenancy was introduced.
+ * Set HOME_TENANT_ID (production: 4). With it unset, no tenant is treated as
+ * home, which is the safe default: everyone gets the generic behavior.
  */
 function homeTenantId() {
-  const raw = process.env.HOME_TENANT_ID;
-  if (raw === '' || raw === 'none') return null;
-  const id = parseInt(raw || '1', 10);
+  const id = parseInt(process.env.HOME_TENANT_ID || '', 10);
   return Number.isFinite(id) ? id : null;
 }
 
