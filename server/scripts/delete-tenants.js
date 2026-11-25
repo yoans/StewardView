@@ -18,7 +18,12 @@ const path = require('path');
 const { connect, parseArgs, DryRun } = require('./_scriptDb');
 
 const USER_LINKED = ['mfa_codes', 'password_reset_tokens', 'user_invite_tokens'];
-const REDACT = { users: ['password_hash'], bank_connections: ['access_token_encrypted'] };
+// Secrets, and backup payloads (huge, and old ones hold every church's data).
+const REDACT = {
+  users: ['password_hash'],
+  bank_connections: ['access_token_encrypted'],
+  data_backups: ['backup_data'],
+};
 
 async function tenantTables(db) {
   const rows = await db('information_schema.columns')
