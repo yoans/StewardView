@@ -66,7 +66,9 @@ async function main() {
     keep.forEach((t) => console.log(`  ${t.id}  ${t.name}`));
     console.log(args.confirm ? 'Mode: DELETE (permanent)' : 'Mode: dry run (rolled back)');
 
-    const admins = await db('users').whereIn('tenant_id', ids).where({ is_platform_admin: true }).select('id', 'email', 'tenant_id');
+    const admins = (await db.schema.hasColumn('users', 'is_platform_admin'))
+      ? await db('users').whereIn('tenant_id', ids).where({ is_platform_admin: true }).select('id', 'email', 'tenant_id')
+      : [];
     if (admins.length) {
       admins.forEach((u) => console.log(`  ! platform admin user ${u.id} <${u.email}> is in tenant ${u.tenant_id}`));
       throw new Error('Refusing: move platform admin users to a kept tenant first.');
@@ -100,6 +102,17 @@ async function main() {
       }
       const [{ c }] = await q.count('* as c');
       if (Number(c) > 0) problems.push(`${c} row(s) in ${fk.child}.${fk.child_col} → ${fk.parent} outside the deleted tenants`);
+    }
+    // The other direction: doomed rows that point at a KEPT tenant's rows are
+    // almost certainly misfiled data belonging to that tenant.
+    for (const fk of fks) {
+      if (!tables.includes(fk.child) || !tables.includes(fk.parent)) continue;
+      const [{ c }] = await db(`${fk.child} as c`)
+        .join(`${fk.parent} as p`, `c.${fk.child_col}`, `p.${fk.parent_col}`)
+        .whereIn('c.tenant_id', ids)
+        .where((w) => w.whereNotIn('p.tenant_id', ids).orWhereNull('p.tenant_id'))
+        .count('* as c');
+      if (Number(c) > 0) problems.push(`${c} row(s) in ${fk.child} filed under a deleted tenant but pointing at a kept tenant's ${fk.parent} (misfiled?)`);
     }
     if (problems.length) {
       problems.forEach((p) => console.log(`  ! ${p}`));

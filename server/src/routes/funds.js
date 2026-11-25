@@ -137,21 +137,23 @@ router.post('/:id/transfer', authenticate, requireTenant, authorize('admin', 'tr
     const date = todayInTimeZone();
     const amountValue = centsToDecimal(amountCents);
 
-    // Debit from source
-    await db('fund_transactions').insert({
-      fund_id: fromFund.id, type: 'transfer_out', amount: amountValue, date,
-      description: description || `Transfer to ${toFund.name}`,
-      created_by: req.user.id,
-    });
-    await db('funds').where({ id: fromFund.id }).decrement('current_balance', amountValue);
+    await db.transaction(async (trx) => {
+      // Debit from source
+      await trx('fund_transactions').insert({
+        fund_id: fromFund.id, type: 'transfer_out', amount: amountValue, date,
+        description: description || `Transfer to ${toFund.name}`,
+        created_by: req.user.id, tenant_id: req.tenantId,
+      });
+      await trx('funds').where({ id: fromFund.id, tenant_id: req.tenantId }).decrement('current_balance', amountValue);
 
-    // Credit to destination
-    await db('fund_transactions').insert({
-      fund_id: toFund.id, type: 'transfer_in', amount: amountValue, date,
-      description: description || `Transfer from ${fromFund.name}`,
-      created_by: req.user.id,
+      // Credit to destination
+      await trx('fund_transactions').insert({
+        fund_id: toFund.id, type: 'transfer_in', amount: amountValue, date,
+        description: description || `Transfer from ${fromFund.name}`,
+        created_by: req.user.id, tenant_id: req.tenantId,
+      });
+      await trx('funds').where({ id: toFund.id, tenant_id: req.tenantId }).increment('current_balance', amountValue);
     });
-    await db('funds').where({ id: toFund.id }).increment('current_balance', amountValue);
 
     await logAudit({
       entityType: 'fund', entityId: fromFund.id, action: 'transfer',
@@ -187,17 +189,16 @@ router.post('/:id/adjust', authenticate, requireTenant, authorize('admin', 'trea
     const amountValue = centsToDecimal(amountCents);
     const fundTxnType = type === 'increase' ? 'adjustment_in' : 'adjustment_out';
 
-    await db('fund_transactions').insert({
-      fund_id: fund.id, type: fundTxnType, amount: amountValue, date,
-      description: description || `Balance adjustment (${type})`,
-      created_by: req.user.id,
+    await db.transaction(async (trx) => {
+      await trx('fund_transactions').insert({
+        fund_id: fund.id, type: fundTxnType, amount: amountValue, date,
+        description: description || `Balance adjustment (${type})`,
+        created_by: req.user.id, tenant_id: req.tenantId,
+      });
+      const scoped = trx('funds').where({ id: fund.id, tenant_id: req.tenantId });
+      if (type === 'increase') await scoped.increment('current_balance', amountValue);
+      else await scoped.decrement('current_balance', amountValue);
     });
-
-    if (type === 'increase') {
-      await db('funds').where({ id: fund.id }).increment('current_balance', amountValue);
-    } else {
-      await db('funds').where({ id: fund.id }).decrement('current_balance', amountValue);
-    }
 
     await logAudit({
       entityType: 'fund', entityId: fund.id, action: 'adjust',
