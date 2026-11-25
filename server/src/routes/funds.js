@@ -97,7 +97,7 @@ router.post('/', authenticate, requireTenant, authorize('admin', 'treasurer'), a
 // PUT /api/funds/:id — update fund details
 router.put('/:id', authenticate, requireTenant, authorize('admin', 'treasurer'), async (req, res) => {
   try {
-    const existing = await db('funds').where({ id: req.params.id }).first();
+    const existing = await db('funds').where({ id: req.params.id, tenant_id: req.tenantId }).first();
     if (!existing) return res.status(404).json({ error: 'Fund not found' });
 
     const updates = {};
@@ -105,7 +105,7 @@ router.put('/:id', authenticate, requireTenant, authorize('admin', 'treasurer'),
       if (req.body[f] !== undefined) updates[f] = req.body[f];
     });
 
-    await db('funds').where({ id: req.params.id }).update(updates);
+    await db('funds').where({ id: existing.id, tenant_id: req.tenantId }).update(updates);
 
     await logAudit({
       entityType: 'fund', entityId: existing.id, action: 'update',
@@ -115,7 +115,7 @@ router.put('/:id', authenticate, requireTenant, authorize('admin', 'treasurer'),
       tenantId: req.tenantId || req.user?.tenant_id || null,
     });
 
-    const updated = await db('funds').where({ id: req.params.id }).first();
+    const updated = await db('funds').where({ id: existing.id, tenant_id: req.tenantId }).first();
     res.json(updated);
   } catch (err) {
     console.error('Update fund error:', err);

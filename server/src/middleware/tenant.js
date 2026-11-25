@@ -1,4 +1,13 @@
+const crypto = require('crypto');
 const db = require('../models/db');
+
+// Constant-time comparison so the platform secret can't be guessed byte by byte.
+function secretsMatch(provided, expected) {
+  if (!provided || !expected) return false;
+  const a = crypto.createHash('sha256').update(String(provided)).digest();
+  const b = crypto.createHash('sha256').update(String(expected)).digest();
+  return crypto.timingSafeEqual(a, b);
+}
 
 /**
  * Extracts tenant from req.user.tenant_id (set by auth middleware).
@@ -52,7 +61,7 @@ async function requireTenant(req, res, next) {
  */
 function requirePlatformAdmin(req, res, next) {
   const secret = req.headers['x-platform-secret'];
-  if (secret && secret === process.env.PLATFORM_ADMIN_SECRET) {
+  if (secret && secretsMatch(secret, process.env.PLATFORM_ADMIN_SECRET)) {
     return next();
   }
   if (req.user && req.user.is_platform_admin) {

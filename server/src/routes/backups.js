@@ -3,12 +3,7 @@ const db = require('../models/db');
 const { authenticate, authorize } = require('../middleware/auth');
 const { requireTenant } = require('../middleware/tenant');
 const { logAudit } = require('../models/auditLog');
-
-const BACKUP_TABLES = [
-  'users', 'bank_accounts', 'categories', 'funds', 'transactions',
-  'fund_transactions', 'budgets', 'audit_log',
-  'monthly_reports', 'givelify_contributions', 'data_backups', 'app_settings',
-];
+const { createTenantBackup } = require('../services/backups');
 
 // GET /api/backups — list all backups
 router.get('/', authenticate, requireTenant, authorize('admin'), async (req, res) => {
@@ -30,30 +25,11 @@ router.get('/', authenticate, requireTenant, authorize('admin'), async (req, res
 // POST /api/backups — create a manual backup
 router.post('/', authenticate, requireTenant, authorize('admin'), async (req, res) => {
   try {
-    const backupData = {};
-    let totalRows = 0;
-    const tablesBackedUp = [];
-
-    for (const table of BACKUP_TABLES) {
-      try {
-        const hasTable = await db.schema.hasTable(table);
-        if (!hasTable) continue;
-        const rows = await db(table).where({ tenant_id: req.tenantId }).select('*');
-        backupData[table] = rows;
-        totalRows += rows.length;
-        tablesBackedUp.push(table);
-      } catch { /* table may not exist yet */ }
-    }
-
-    const [{ id }] = await db('data_backups').insert({
-      backup_type: req.body.type || 'manual',
-      status: 'success',
-      tables_included: JSON.stringify(tablesBackedUp),
-      row_count: totalRows,
-      backup_data: JSON.stringify(backupData),
-      created_by: req.user.id,
-      tenant_id: req.tenantId,
-    }).returning('id');
+    const { id, tablesBackedUp, totalRows } = await createTenantBackup({
+      tenantId: req.tenantId,
+      type: 'manual',
+      createdBy: req.user.id,
+    });
 
     await logAudit({
       entityType: 'backup', entityId: id, action: 'create',
@@ -74,7 +50,7 @@ router.post('/', authenticate, requireTenant, authorize('admin'), async (req, re
     // Log failed backup
     try {
       await db('data_backups').insert({
-        backup_type: req.body.type || 'manual',
+        backup_type: 'manual',
         status: 'failed',
         error_message: err.message,
         created_by: req.user.id,
@@ -82,7 +58,7 @@ router.post('/', authenticate, requireTenant, authorize('admin'), async (req, re
       });
     } catch { /* ignore */ }
 
-    res.status(500).json({ error: 'Backup failed: ' + err.message });
+    res.status(500).json({ error: 'Backup failed. Please try again.' });
   }
 });
 
@@ -108,7 +84,7 @@ router.delete('/:id', authenticate, requireTenant, authorize('admin'), async (re
     const backup = await db('data_backups').where({ id: req.params.id, tenant_id: req.tenantId }).first();
     if (!backup) return res.status(404).json({ error: 'Backup not found' });
 
-    await db('data_backups').where({ id: req.params.id }).update({
+    await db('data_backups').where({ id: backup.id, tenant_id: req.tenantId }).update({
       backup_data: null,
       status: 'deleted',
     });

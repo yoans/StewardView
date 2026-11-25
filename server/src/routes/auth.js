@@ -16,6 +16,8 @@ const MFA_CODE_EXPIRY_MINUTES = 10;
 const PASSWORD_RESET_EXPIRY_MINUTES = 30;
 const INVITE_EXPIRY_DAYS = 7;
 const MIN_ADMINS = 2;
+// Compared against when a login email doesn't exist, so response time doesn't reveal it.
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync(crypto.randomBytes(16).toString('hex'), 10);
 
 // ── Helper: count active admins within a tenant ──────────
 async function countActiveAdmins(tenantId) {
@@ -46,8 +48,6 @@ function buildInviteSetupUrl(token) {
   return `${baseUrl}/login?invite_token=${encodeURIComponent(token)}`;
 }
 
-async function createInviteToken(userId) {
-  await db('user_invite_tokens').where({ user_id: userId, used: false }).update({ used: true });
 async function issuePasswordReset(user, audit) {
   await db('password_reset_tokens').where({ user_id: user.id, used: false }).update({ used: true });
   const token = crypto.randomBytes(32).toString('hex');
@@ -69,6 +69,8 @@ async function issuePasswordReset(user, audit) {
   });
 }
 
+async function createInviteToken(userId) {
+  await db('user_invite_tokens').where({ user_id: userId, used: false }).update({ used: true });
   const token = crypto.randomBytes(32).toString('hex');
   await db('user_invite_tokens').insert({
     user_id: userId,
@@ -85,13 +87,15 @@ router.post('/login', async (req, res) => {
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
 
     const user = await db('users').where({ email }).whereNull('deleted_at').first();
-    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+
+    // Always run bcrypt (against a dummy hash when the email is unknown) and only
+    // reveal account status after the password checks out, so the login form
+    // can't be used to discover which emails have accounts.
+    const valid = await bcrypt.compare(String(password), user?.password_hash || DUMMY_PASSWORD_HASH);
+    if (!user || !valid) return res.status(401).json({ error: 'Invalid credentials' });
     if (user.must_set_password) return res.status(403).json({ error: 'Use your setup link to choose a password before signing in.' });
     if (!user.is_approved) return res.status(403).json({ error: 'Your account is pending admin approval.' });
     if (!user.is_active) return res.status(403).json({ error: 'This account has been deactivated.' });
-
-    const valid = await bcrypt.compare(password, user.password_hash);
-    if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
 
     // Invalidate any existing unused codes for this user
     await db('mfa_codes').where({ user_id: user.id, used: false }).update({ used: true });
@@ -468,10 +472,6 @@ router.put('/users/:id', authenticate, requireTenant, authorize('admin'), async 
   }
 });
 
-// POST /api/auth/users/:id/resend-invite — send a fresh setup link
-router.post('/users/:id/resend-invite', authenticate, requireTenant, authorize('admin'), async (req, res) => {
-  try {
-    const target = await db('users').where({ id: req.params.id, tenant_id: req.tenantId }).whereNull('deleted_at').first();
 // DELETE /api/auth/users/:id/invite — remove someone who has not set a password
 router.delete('/users/:id/invite', authenticate, requireTenant, authorize('admin'), async (req, res) => {
   try {
@@ -542,6 +542,10 @@ router.post('/users/:id/send-reset', authenticate, requireTenant, authorize('adm
   }
 });
 
+// POST /api/auth/users/:id/resend-invite — send a fresh setup link
+router.post('/users/:id/resend-invite', authenticate, requireTenant, authorize('admin'), async (req, res) => {
+  try {
+    const target = await db('users').where({ id: req.params.id, tenant_id: req.tenantId }).whereNull('deleted_at').first();
     if (!target) return res.status(404).json({ error: 'User not found' });
     if (!target.must_set_password) return res.status(400).json({ error: 'This user has already set a password' });
 

@@ -18,6 +18,12 @@ function authenticate(req, res, next) {
     const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, JWT_SECRET);
 
+    // Special-purpose tokens (e.g. the pre-MFA token issued after the password
+    // step) are only valid on their own endpoint, never as a session.
+    if (decoded.purpose) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+
     // Re-check that the user hasn't been deactivated since the JWT was issued
     db('users')
       .where({ id: decoded.id, is_active: true, is_approved: true })

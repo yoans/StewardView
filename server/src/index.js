@@ -167,44 +167,11 @@ cron.schedule('0 6 1 * *', async () => {
 
 // ── Cron: Daily backup at 2 AM ──────────────────────────
 cron.schedule('0 2 * * *', async () => {
-  console.log('🗄️ Running scheduled daily backup...');
+  console.log('🗄️ Running scheduled daily backups (one per church)...');
   try {
-    const BACKUP_TABLES = [
-      'users', 'bank_accounts', 'categories', 'funds', 'transactions',
-      'fund_transactions', 'budgets', 'audit_log',
-      'monthly_reports', 'givelify_contributions', 'data_backups', 'app_settings',
-      'recurring_transfers', 'recurring_transfer_runs', 'bank_connections',
-    ];
-    const backupData = {};
-    let totalRows = 0;
-    const tablesBackedUp = [];
-    for (const table of BACKUP_TABLES) {
-      try {
-        const hasTable = await db.schema.hasTable(table);
-        if (!hasTable) continue;
-        const rows = await db(table).select('*');
-        backupData[table] = rows;
-        totalRows += rows.length;
-        tablesBackedUp.push(table);
-      } catch { /* skip */ }
-    }
-    await db('data_backups').insert({
-      backup_type: 'scheduled',
-      status: 'success',
-      tables_included: JSON.stringify(tablesBackedUp),
-      row_count: totalRows,
-      backup_data: JSON.stringify(backupData),
-    });
-    // Keep only last 30 scheduled backups
-    const oldBackups = await db('data_backups')
-      .where({ backup_type: 'scheduled' })
-      .orderBy('created_at', 'desc')
-      .offset(30)
-      .select('id');
-    if (oldBackups.length > 0) {
-      await db('data_backups').whereIn('id', oldBackups.map(b => b.id)).del();
-    }
-    console.log(`✅ Backup complete: ${tablesBackedUp.length} tables, ${totalRows} rows`);
+    const { runScheduledBackups } = require('./services/backups');
+    const { ok, failed } = await runScheduledBackups();
+    console.log(`✅ Backups complete: ${ok} churches${failed ? `, ${failed} failed` : ''}`);
   } catch (err) {
     console.error('Scheduled backup error:', err);
   }
