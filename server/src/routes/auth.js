@@ -48,6 +48,27 @@ function buildInviteSetupUrl(token) {
 
 async function createInviteToken(userId) {
   await db('user_invite_tokens').where({ user_id: userId, used: false }).update({ used: true });
+async function issuePasswordReset(user, audit) {
+  await db('password_reset_tokens').where({ user_id: user.id, used: false }).update({ used: true });
+  const token = crypto.randomBytes(32).toString('hex');
+  await db('password_reset_tokens').insert({
+    user_id: user.id,
+    token_hash: hashResetToken(token),
+    expires_at: new Date(Date.now() + PASSWORD_RESET_EXPIRY_MINUTES * 60 * 1000),
+  });
+  await sendPasswordResetEmail(user.email, buildPasswordResetUrl(token));
+  await logAudit({
+    entityType: 'user',
+    entityId: user.id,
+    action: audit.action,
+    newValues: { email: user.email },
+    userId: audit.actorId || null,
+    userName: audit.userName,
+    ipAddress: audit.ipAddress,
+    tenantId: user.tenant_id || null,
+  });
+}
+
   const token = crypto.randomBytes(32).toString('hex');
   await db('user_invite_tokens').insert({
     user_id: userId,
@@ -136,7 +157,8 @@ router.post('/verify-mfa', async (req, res) => {
 
     await logAudit({
       entityType: 'user', entityId: user.id, action: 'login',
-      newValues: { email: user.email, mfa: true }, userName: user.name,
+      newValues: { email: user.email, mfa: true },
+      userId: user.id, userName: user.name,
       ipAddress: req.ip,
       tenantId: user.tenant_id || null,
     });
@@ -161,24 +183,10 @@ router.post('/forgot-password', async (req, res) => {
       .first();
 
     if (user) {
-      await db('password_reset_tokens').where({ user_id: user.id, used: false }).update({ used: true });
-
-      const token = crypto.randomBytes(32).toString('hex');
-      const tokenHash = hashResetToken(token);
-      const expiresAt = new Date(Date.now() + PASSWORD_RESET_EXPIRY_MINUTES * 60 * 1000);
-
-      await db('password_reset_tokens').insert({
-        user_id: user.id,
-        token_hash: tokenHash,
-        expires_at: expiresAt,
-      });
-
-      await sendPasswordResetEmail(user.email, buildPasswordResetUrl(token));
-
-      await logAudit({
-        entityType: 'user', entityId: user.id, action: 'password_reset_requested',
-        newValues: { email: user.email }, userName: user.name, ipAddress: req.ip,
-        tenantId: user.tenant_id || null,
+      await issuePasswordReset(user, {
+        action: 'password_reset_requested',
+        userName: user.name,
+        ipAddress: req.ip,
       });
     }
 
@@ -389,7 +397,23 @@ router.get('/users', authenticate, requireTenant, authorize('admin', 'treasurer'
     .where({ tenant_id: req.tenantId })
     .whereNull('deleted_at')
     .select('id', 'email', 'name', 'role', 'is_active', 'is_approved', 'must_set_password', 'invited_at', 'approved_at', 'created_at');
-  res.json(users);
+
+  if (req.user.role !== 'admin' || users.length === 0) return res.json(users);
+
+  const logins = await db('audit_log')
+    .where({ entity_type: 'user', action: 'login' })
+    .whereIn('entity_id', users.map((user) => user.id))
+    .where(function sameChurch() {
+      this.where('tenant_id', req.tenantId).orWhereNull('tenant_id');
+    })
+    .groupBy('entity_id')
+    .select('entity_id')
+    .max('created_at as last_login_at');
+  const lastLogin = new Map(logins.map((row) => [Number(row.entity_id), row.last_login_at]));
+  res.json(users.map((user) => ({
+    ...user,
+    last_login_at: lastLogin.get(Number(user.id)) || null,
+  })));
 });
 
 // PUT /api/auth/users/:id — admin updates user role / active status (same tenant only)
@@ -448,6 +472,76 @@ router.put('/users/:id', authenticate, requireTenant, authorize('admin'), async 
 router.post('/users/:id/resend-invite', authenticate, requireTenant, authorize('admin'), async (req, res) => {
   try {
     const target = await db('users').where({ id: req.params.id, tenant_id: req.tenantId }).whereNull('deleted_at').first();
+// DELETE /api/auth/users/:id/invite — remove someone who has not set a password
+router.delete('/users/:id/invite', authenticate, requireTenant, authorize('admin'), async (req, res) => {
+  try {
+    const target = await db('users')
+      .where({ id: req.params.id, tenant_id: req.tenantId })
+      .whereNull('deleted_at')
+      .first();
+    if (!target) return res.status(404).json({ error: 'User not found' });
+    if (target.id === req.user.id) return res.status(400).json({ error: 'Cannot delete your own account here' });
+    if (!target.must_set_password) return res.status(400).json({ error: 'This person has already set a password' });
+
+    if (target.role === 'admin' && target.is_active) {
+      const adminCount = await countActiveAdmins(req.tenantId);
+      if (adminCount <= MIN_ADMINS) {
+        return res.status(400).json({
+          error: `Cannot delete this invite. The system requires at least ${MIN_ADMINS} active admins.`,
+        });
+      }
+    }
+
+    await db('user_invite_tokens').where({ user_id: target.id, used: false }).update({ used: true });
+    await db('password_reset_tokens').where({ user_id: target.id, used: false }).update({ used: true });
+    await db('mfa_codes').where({ user_id: target.id, used: false }).update({ used: true });
+    await db('users').where({ id: target.id }).update({
+      is_active: false,
+      is_approved: false,
+      must_set_password: false,
+      deleted_at: new Date(),
+      email: `deleted-${target.id}-${target.email}`.slice(0, 255),
+    });
+
+    await logAudit({
+      entityType: 'user', entityId: target.id, action: 'delete_invite',
+      oldValues: { email: target.email, name: target.name },
+      userId: req.user.id, userName: req.user.name, ipAddress: req.ip,
+      tenantId: req.tenantId,
+    });
+
+    res.json({ message: 'Invite deleted' });
+  } catch (err) {
+    console.error('Delete invite error:', err);
+    res.status(500).json({ error: 'Could not delete invite' });
+  }
+});
+
+// POST /api/auth/users/:id/send-reset — email a password reset link
+router.post('/users/:id/send-reset', authenticate, requireTenant, authorize('admin'), async (req, res) => {
+  try {
+    const target = await db('users')
+      .where({ id: req.params.id, tenant_id: req.tenantId })
+      .whereNull('deleted_at')
+      .first();
+    if (!target) return res.status(404).json({ error: 'User not found' });
+    if (target.must_set_password) return res.status(400).json({ error: 'This person still needs the setup link' });
+    if (!target.is_active || !target.is_approved) return res.status(400).json({ error: 'This account is not active' });
+
+    await issuePasswordReset(target, {
+      action: 'password_reset_sent',
+      actorId: req.user.id,
+      userName: req.user.name,
+      ipAddress: req.ip,
+    });
+
+    res.json({ message: `Password reset link sent to ${target.email}` });
+  } catch (err) {
+    console.error('Send reset error:', err);
+    res.status(500).json({ error: 'Could not send password reset link' });
+  }
+});
+
     if (!target) return res.status(404).json({ error: 'User not found' });
     if (!target.must_set_password) return res.status(400).json({ error: 'This user has already set a password' });
 

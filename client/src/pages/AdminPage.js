@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { authAPI, backupsAPI } from '../services/api';
+import { formatDateTime } from '../utils/format';
 
 const ROLES = ['admin', 'treasurer', 'viewer'];
 const ROLE_COLORS = {
@@ -106,6 +107,29 @@ export default function AdminPage({ user, tenant, onTenantUpdated }) {
       loadUsers();
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to send setup link');
+    }
+  };
+
+  const handleDeleteInvite = async (u) => {
+    if (!window.confirm(`Delete the invite for ${u.email}? The setup link will stop working.`)) return;
+    setError(''); setSuccess('');
+    try {
+      const res = await authAPI.deleteInvite(u.id);
+      setSuccess(res.data.message || 'Invite deleted');
+      loadUsers();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to delete invite');
+    }
+  };
+
+  const handleSendReset = async (u) => {
+    if (!window.confirm(`Send a password reset link to ${u.email}?`)) return;
+    setError(''); setSuccess('');
+    try {
+      const res = await authAPI.sendPasswordReset(u.id);
+      setSuccess(res.data.message || 'Password reset link sent');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to send password reset link');
     }
   };
 
@@ -225,6 +249,7 @@ export default function AdminPage({ user, tenant, onTenantUpdated }) {
                     <th className="pb-2">Email</th>
                     <th className="pb-2">Role</th>
                     <th className="pb-2">Status</th>
+                    <th className="pb-2">Last login</th>
                     <th className="pb-2">Actions</th>
                   </tr>
                 </thead>
@@ -248,10 +273,23 @@ export default function AdminPage({ user, tenant, onTenantUpdated }) {
                           {userStatus(u)}
                         </span>
                       </td>
+                      <td className="py-3 text-gray-600 whitespace-nowrap">
+                        {u.last_login_at ? formatDateTime(u.last_login_at) : 'Never'}
+                      </td>
                       <td className="py-3 space-x-3">
                         {u.must_set_password && u.id !== user.id && (
-                          <button className="text-xs text-blue-600 hover:text-blue-800" onClick={() => handleResendInvite(u.id)}>
-                            Resend setup link
+                          <>
+                            <button className="text-xs text-blue-600 hover:text-blue-800" onClick={() => handleResendInvite(u.id)}>
+                              Resend setup link
+                            </button>
+                            <button className="text-xs text-red-600 hover:text-red-800" onClick={() => handleDeleteInvite(u)}>
+                              Delete invite
+                            </button>
+                          </>
+                        )}
+                        {!u.must_set_password && u.is_active && (
+                          <button className="text-xs text-blue-600 hover:text-blue-800" onClick={() => handleSendReset(u)}>
+                            Send password reset
                           </button>
                         )}
                         {u.id !== user.id && u.is_approved && !u.must_set_password && (

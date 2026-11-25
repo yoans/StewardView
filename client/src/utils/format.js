@@ -26,6 +26,20 @@ export function formatDate(value) {
   return text;
 }
 
+/** Date and time in the viewer's local clock. */
+export function formatDateTime(value) {
+  if (value == null || value === '') return '—';
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 /** User-facing transaction status label + badge class. */
 export function transactionStatusDisplay(status) {
   switch (status) {
