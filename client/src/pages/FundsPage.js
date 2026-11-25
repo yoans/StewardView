@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { fundsAPI, bankAPI } from '../services/api';
 import { formatDate } from '../utils/format';
 import FundsVsBankBanner from '../components/FundsVsBankBanner';
+import FundBalanceCharts from '../components/FundBalanceCharts';
 
 const fmt = (n) => parseFloat(n || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
@@ -14,12 +15,15 @@ export default function FundsPage({ user }) {
   const [showAdjust, setShowAdjust] = useState(false);
   const [showRecurring, setShowRecurring] = useState(false);
   const [recurringTransfers, setRecurringTransfers] = useState([]);
-  const [form, setForm] = useState({ name: '', description: '', target_amount: '', is_restricted: true });
+  const [form, setForm] = useState({ name: '', description: '', target_amount: '' });
   const [transferForm, setTransferForm] = useState({ to_fund_id: '', amount: '', description: '' });
   const [adjustForm, setAdjustForm] = useState({ type: 'increase', amount: '', description: '' });
   const [recurringForm, setRecurringForm] = useState({ from_fund_id: '', to_fund_id: '', amount: '', description: '', frequency: 'monthly', day_of_month: 1 });
   const [runMessage, setRunMessage] = useState('');
   const [running, setRunning] = useState(false);
+  const [balanceWindow, setBalanceWindow] = useState('all');
+  const [balanceSeries, setBalanceSeries] = useState(null);
+  const [balanceLoading, setBalanceLoading] = useState(true);
   const canEdit = ['admin', 'treasurer'].includes(user.role);
 
   const loadFunds = async () => {
@@ -43,6 +47,21 @@ export default function FundsPage({ user }) {
 
   useEffect(() => { loadFunds(); loadRecurring(); loadRecon(); }, []);
 
+  const balanceKey = funds.map((fund) => `${fund.id}:${fund.current_balance}`).join('|');
+  useEffect(() => {
+    let cancel = false;
+    setBalanceLoading(true);
+    fundsAPI.balances(balanceWindow)
+      .then((res) => { if (!cancel) setBalanceSeries(res.data); })
+      .catch(() => { if (!cancel) setBalanceSeries(null); })
+      .finally(() => { if (!cancel) setBalanceLoading(false); });
+    return () => { cancel = true; };
+  }, [balanceWindow, balanceKey]);
+
+  const orderedFunds = [...funds].sort((a, b) => (
+    (parseFloat(b.current_balance) || 0) - (parseFloat(a.current_balance) || 0) || a.name.localeCompare(b.name)
+  ));
+
   const selectFund = async (id) => {
     const res = await fundsAPI.get(id);
     setSelectedFund(res.data);
@@ -53,7 +72,7 @@ export default function FundsPage({ user }) {
     try {
       await fundsAPI.create({ ...form, target_amount: form.target_amount ? parseFloat(form.target_amount) : null });
       setShowCreate(false);
-      setForm({ name: '', description: '', target_amount: '', is_restricted: true });
+      setForm({ name: '', description: '', target_amount: '' });
       loadFunds();
       loadRecon();
     } catch (err) { alert(err.response?.data?.error || 'Failed to create fund'); }
@@ -141,7 +160,7 @@ export default function FundsPage({ user }) {
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">Earmarked Funds</h2>
+        <h2 className="text-2xl font-bold text-gray-900">Funds</h2>
         <div className="flex space-x-2">
           {canEdit && (
             <>
@@ -158,15 +177,21 @@ export default function FundsPage({ user }) {
 
       <FundsVsBankBanner recon={fundsVsBank} />
 
-      <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-        When money leaves a fund that donors gave for a specific purpose, communicate that clearly
-        (to leadership and, when appropriate, to donors). Keep purpose-specific gifts aligned with intent.
+      <div className="mb-6 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+        Giving is not assigned to a purpose. Deposits stay in the General Fund. On the rare occasion a gift is for a specific purpose, transfer that amount into the fund.
       </div>
+
+      <FundBalanceCharts
+        windowId={balanceWindow}
+        onWindowChange={setBalanceWindow}
+        data={balanceSeries}
+        loading={balanceLoading}
+      />
 
       {/* Create Fund Form */}
       {showCreate && (
         <div className="card mb-6">
-          <h3 className="text-lg font-bold mb-4">Create New Earmarked Fund</h3>
+          <h3 className="text-lg font-bold mb-4">Create Fund</h3>
           <form onSubmit={handleCreate} className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="label">Fund Name</label>
@@ -179,10 +204,6 @@ export default function FundsPage({ user }) {
             <div>
               <label className="label">Description</label>
               <input type="text" className="input" value={form.description} onChange={e => setForm({...form, description: e.target.value})} />
-            </div>
-            <div className="flex items-center space-x-2 pt-6">
-              <input type="checkbox" checked={form.is_restricted} onChange={e => setForm({...form, is_restricted: e.target.checked})} />
-              <label className="text-sm text-gray-700">Purpose-specific fund (e.g. missions, building)</label>
             </div>
             <div className="flex items-end">
               <button type="submit" className="btn-primary">Create Fund</button>
@@ -277,7 +298,7 @@ export default function FundsPage({ user }) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Fund List */}
         <div className="lg:col-span-1 space-y-3">
-          {funds.map(fund => (
+          {orderedFunds.map(fund => (
             <div
               key={fund.id}
               onClick={() => selectFund(fund.id)}
@@ -323,7 +344,8 @@ export default function FundsPage({ user }) {
               {/* Transfer Form */}
               {showTransfer && (
                 <form onSubmit={handleTransfer} className="bg-yellow-50 p-4 rounded-lg mb-4">
-                  <h4 className="font-medium mb-3">Transfer from {selectedFund.name}</h4>
+                  <h4 className="font-medium mb-1">Transfer from {selectedFund.name}</h4>
+                  <p className="text-xs text-gray-600 mb-3">Use this for the rare gift that was given for a specific purpose.</p>
                   <div className="grid grid-cols-3 gap-3">
                     <div>
                       <label className="label">To Fund</label>

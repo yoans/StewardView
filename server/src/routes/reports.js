@@ -150,7 +150,10 @@ router.get('/dashboard', authenticate, requireTenant, async (req, res) => {
     const expenses = parseFloat(monthExpenses.total) || 0;
 
     // Fund balances
-    const funds = await db('funds').where({ is_active: true, tenant_id: req.tenantId });
+    const funds = await db('funds')
+      .where({ is_active: true, tenant_id: req.tenantId })
+      .orderBy('current_balance', 'desc')
+      .orderBy('name', 'asc');
     const totalFunds = funds.reduce((s, f) => s + (parseFloat(f.current_balance) || 0), 0);
     const funds_vs_bank = buildFundsBankReconciliation(funds, bankAccounts);
 

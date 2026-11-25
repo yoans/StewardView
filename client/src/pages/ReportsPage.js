@@ -144,7 +144,7 @@ export default function ReportsPage({ user }) {
 
           {/* Fund Balances */}
           <div className="card">
-            <h4 className="font-bold text-gray-900 mb-3">📌 Earmarked Fund Balances</h4>
+            <h4 className="font-bold text-gray-900 mb-3">Fund balances</h4>
             {report.funds.map(fund => (
               <div key={fund.id} className="flex justify-between py-2 border-b last:border-0">
                 <span className="text-gray-700">

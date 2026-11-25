@@ -5,6 +5,20 @@ import { formatDate } from '../utils/format';
 
 const fmt = (n) => parseFloat(n || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
+function CategoryOptions({ categories }) {
+  const groups = new Map();
+  categories.forEach((category) => {
+    const key = category.group_name || (category.type === 'income' ? 'Giving' : 'Spending');
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(category);
+  });
+  return [...groups.entries()].map(([name, items]) => (
+    <optgroup key={name} label={name}>
+      {items.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+    </optgroup>
+  ));
+}
+
 /** Givelify ACH deposit (posts as 5/3 BANKCARD SYS). */
 function isGivelifyBankSettlement(txn) {
   if (!txn || txn.type !== 'income') return false;
@@ -81,11 +95,21 @@ export default function TransactionsPage({ user }) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const loadData = async () => {
+  const listParams = (source = filters) => {
+    const params = {
+      type: source.type || undefined,
+      start_date: source.start_date || undefined,
+      end_date: source.end_date || undefined,
+    };
+    if (source.uncategorized) params.uncategorized = '1';
+    return params;
+  };
+
+  const loadData = async (source = filters) => {
     setLoading(true);
     try {
       const [txnRes, catRes, fundRes] = await Promise.all([
-        transactionsAPI.list(filters),
+        transactionsAPI.list(listParams(source)),
         categoriesAPI.list(),
         fundsAPI.list(),
       ]);
@@ -106,7 +130,7 @@ export default function TransactionsPage({ user }) {
               }).catch(() => null)
             )
           );
-          const refreshed = await transactionsAPI.list(filters);
+          const refreshed = await transactionsAPI.list(listParams(source));
           txns = refreshed.data;
         }
       }
@@ -125,7 +149,7 @@ export default function TransactionsPage({ user }) {
               }).catch(() => null)
             )
           );
-          const refreshed = await transactionsAPI.list(filters);
+          const refreshed = await transactionsAPI.list(listParams(source));
           txns = refreshed.data;
         }
       }
@@ -305,21 +329,25 @@ export default function TransactionsPage({ user }) {
               <label className="label">Category</label>
               <select className="input" value={form.category_id} onChange={e => setForm({...form, category_id: e.target.value})}>
                 <option value="">— Select —</option>
-                {filteredCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                <CategoryOptions categories={filteredCategories} />
               </select>
             </div>
             <div>
               <label className="label">Fund</label>
-              <select
-                className="input"
-                value={form.fund_id || (generalFundId ? String(generalFundId) : '')}
-                onChange={e => setForm({...form, fund_id: e.target.value})}
-              >
-                {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-              </select>
-              <p className="text-xs text-gray-500 mt-1">
-                Defaults to General Fund.
-              </p>
+              {form.type === 'income' ? (
+                <p className="text-sm text-gray-700 pt-2">General Fund. A gift for a specific purpose is a transfer, not a different deposit.</p>
+              ) : (
+                <>
+                  <select
+                    className="input"
+                    value={form.fund_id || (generalFundId ? String(generalFundId) : '')}
+                    onChange={e => setForm({...form, fund_id: e.target.value})}
+                  >
+                    {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">Defaults to General Fund.</p>
+                </>
+              )}
             </div>
             <div>
               <label className="label">Check #</label>
@@ -355,6 +383,18 @@ export default function TransactionsPage({ user }) {
             <input type="date" className="input" value={filters.end_date} onChange={e => setFilters({...filters, end_date: e.target.value})} />
           </div>
           <button className="btn-secondary" onClick={handleFilter}>Apply Filters</button>
+          <label className="flex items-center gap-2 text-sm text-gray-700 pb-2">
+            <input
+              type="checkbox"
+              checked={Boolean(filters.uncategorized)}
+              onChange={(e) => {
+                const next = { ...filters, uncategorized: e.target.checked };
+                setFilters(next);
+                loadData(next);
+              }}
+            />
+            Uncategorized only
+          </label>
         </div>
       </div>
 
@@ -396,30 +436,27 @@ export default function TransactionsPage({ user }) {
                           title="Budget category"
                         >
                           <option value="">— Uncategorized —</option>
-                          {categoriesForTxn(txn).map((c) => (
-                            <option key={c.id} value={c.id}>{c.name}</option>
-                          ))}
+                          <CategoryOptions categories={categoriesForTxn(txn)} />
                         </select>
                       ) : (
                         txn.category_name || '—'
                       )}
                     </td>
                     <td className="py-2 text-gray-600">
-                      {(() => {
-                        if (canEdit && !isCanceled) {
-                          return (
-                            <select
-                              className="input py-1 text-sm min-w-[10rem]"
-                              value={txn.fund_id || generalFundId || ''}
-                              onChange={(e) => handleFundChange(txn, e.target.value)}
-                              title={txn.type === 'income' ? 'Fund this deposit credits' : 'Fund this debit spends from'}
-                            >
-                              {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                            </select>
-                          );
-                        }
-                        return txn.fund_name || (generalFundId ? 'General Fund' : '—');
-                      })()}
+                      {txn.type === 'income' ? (
+                        'General Fund'
+                      ) : canEdit && !isCanceled ? (
+                        <select
+                          className="input py-1 text-sm min-w-[10rem]"
+                          value={txn.fund_id || generalFundId || ''}
+                          onChange={(e) => handleFundChange(txn, e.target.value)}
+                          title="Fund this debit spends from"
+                        >
+                          {funds.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                        </select>
+                      ) : (
+                        txn.fund_name || (generalFundId ? 'General Fund' : '—')
+                      )}
                     </td>
                     <td className={`py-2 text-right font-medium ${txn.type === 'income' ? 'text-green-600' : 'text-red-600'} ${isCanceled ? 'line-through' : ''}`}>
                       {txn.type === 'income' ? '+' : '-'}{fmt(txn.amount)}
@@ -450,7 +487,7 @@ export default function TransactionsPage({ user }) {
                 );
               })}
               {transactions.length === 0 && (
-                <tr><td colSpan="8" className="py-8 text-center text-gray-400">No transactions found</td></tr>
+                <tr><td colSpan="8" className="py-8 text-center text-gray-400">{filters.uncategorized ? 'Nothing left uncategorized.' : 'No transactions found'}</td></tr>
               )}
             </tbody>
           </table>

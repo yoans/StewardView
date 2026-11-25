@@ -99,6 +99,16 @@ async function reverseFundMovement({
 }
 
 /**
+ * Income always credits the General Fund. A gift for a specific purpose
+ * is a fund transfer, not a deposit assigned to that fund.
+ */
+async function resolveIncomeFundId(tenantId, trx = db) {
+  const general = await getGeneralFund(tenantId, trx);
+  if (!general) throw new Error('General Fund is required for income');
+  return general.id;
+}
+
+/**
  * Resolve fund for an expense/debit. Defaults to General Fund.
  * Returns fund id or throws if none available.
  */
@@ -158,6 +168,7 @@ module.exports = {
   applyFundMovement,
   postFundAdjustment,
   reverseFundMovement,
+  resolveIncomeFundId,
   resolveExpenseFundId,
   buildFundsBankReconciliation,
   roundMoney,

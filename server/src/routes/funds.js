@@ -5,12 +5,56 @@ const { requireTenant } = require('../middleware/tenant');
 const { logAudit } = require('../models/auditLog');
 const { toCents, centsToDecimal, moneyLt, formatMoney } = require('../utils/money');
 const { todayInTimeZone, initialNextRun } = require('../utils/dates');
+const { buildFundPoints, isoDate, windowBounds } = require('../utils/fundBalances');
 const { runRecurringTransfers } = require('../services/recurringTransfers');
 
 // GET /api/funds — list all funds with balances
 router.get('/', authenticate, requireTenant, async (req, res) => {
   const funds = await db('funds').where({ is_active: true, tenant_id: req.tenantId }).orderBy('name');
   res.json(funds);
+});
+
+// GET /api/funds/balances?window=3m|6m|1y|ytd|all
+router.get('/balances', authenticate, requireTenant, async (req, res) => {
+  try {
+    const today = todayInTimeZone();
+    const bounds = windowBounds(String(req.query.window || 'all'), today);
+    const funds = await db('funds')
+      .where({ is_active: true, tenant_id: req.tenantId })
+      .orderBy('current_balance', 'desc')
+      .orderBy('name', 'asc');
+    const ids = funds.map((fund) => fund.id);
+    const rows = ids.length
+      ? await db('fund_transactions').whereIn('fund_id', ids).select('id', 'fund_id', 'type', 'amount', 'date')
+      : [];
+    const byFund = new Map();
+    rows.forEach((row) => {
+      const id = Number(row.fund_id);
+      if (!byFund.has(id)) byFund.set(id, []);
+      byFund.get(id).push(row);
+    });
+
+    let from = bounds.from;
+    if (!from) {
+      const earliest = rows.reduce((min, row) => {
+        const date = isoDate(row.date);
+        return date && (!min || date < min) ? date : min;
+      }, null);
+      from = earliest || today;
+    }
+
+    const series = funds.map((fund) => ({
+      id: fund.id,
+      name: fund.name,
+      balance: Number(fund.current_balance) || 0,
+      points: buildFundPoints(byFund.get(Number(fund.id)) || [], fund.current_balance, from, bounds.to),
+    }));
+
+    res.json({ from, to: bounds.to, series });
+  } catch (err) {
+    console.error('Fund balances error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 // GET /api/funds/:id — single fund with recent activity

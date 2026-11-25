@@ -4,7 +4,7 @@ const db = require('../models/db');
 const { authenticate, authorize } = require('../middleware/auth');
 const { requireTenant } = require('../middleware/tenant');
 const { logAudit } = require('../models/auditLog');
-const { getGeneralFund, applyFundMovement, reverseFundMovement, resolveExpenseFundId } = require('../utils/fundBank');
+const { applyFundMovement, reverseFundMovement, resolveIncomeFundId, resolveExpenseFundId } = require('../utils/fundBank');
 
 // GET /api/transactions
 router.get('/', authenticate, requireTenant, async (req, res) => {
@@ -29,6 +29,9 @@ router.get('/', authenticate, requireTenant, async (req, res) => {
       .offset(offset);
 
     if (type) query = query.where('transactions.type', type);
+    if (req.query.uncategorized === '1' || req.query.uncategorized === 'true') {
+      query = query.whereNull('transactions.category_id').whereNot('transactions.status', 'void');
+    }
     if (category_id) query = query.where('transactions.category_id', category_id);
     if (fund_id) query = query.where('transactions.fund_id', fund_id);
     if (status) query = query.where('transactions.status', status);
@@ -68,9 +71,12 @@ router.post('/', authenticate, requireTenant, authorize('admin', 'treasurer', 'f
       } catch (e) {
         return res.status(400).json({ error: e.message });
       }
-    } else if (!fund_id && type === 'income') {
-      const generalFund = await getGeneralFund(req.tenantId);
-      if (generalFund) fund_id = generalFund.id;
+    } else if (type === 'income') {
+      try {
+        fund_id = await resolveIncomeFundId(req.tenantId);
+      } catch (e) {
+        return res.status(400).json({ error: e.message });
+      }
     }
 
     const ref_number = uuidv4();
@@ -145,7 +151,14 @@ router.put('/:id', authenticate, requireTenant, authorize('admin', 'treasurer', 
     const nextDescription = updates.description !== undefined ? updates.description : existing.description;
     const nextPayee = updates.payee_payer !== undefined ? updates.payee_payer : existing.payee_payer;
 
-    if (nextType === 'expense' && nextStatus !== 'void') {
+    if (nextType === 'income' && nextStatus !== 'void') {
+      try {
+        nextFundId = await resolveIncomeFundId(req.tenantId);
+        updates.fund_id = nextFundId;
+      } catch (e) {
+        return res.status(400).json({ error: e.message });
+      }
+    } else if (nextType === 'expense' && nextStatus !== 'void') {
       try {
         nextFundId = await resolveExpenseFundId(req.tenantId, nextFundId || null);
         updates.fund_id = nextFundId;

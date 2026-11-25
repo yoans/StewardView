@@ -79,7 +79,7 @@ async function generateMonthlyReportPDF(data, outputPath) {
     drawLine(doc);
 
     // ── Earmarked Fund Balances ──────────────────────────
-    sectionHeader(doc, 'Earmarked Fund Balances');
+    sectionHeader(doc, 'Fund Balances');
     data.funds.forEach(fund => {
       const targetStr = fund.target_amount ? ` (Goal: $${fmtNum(fund.target_amount)})` : '';
       doc.fontSize(10).fillColor(darkGray)

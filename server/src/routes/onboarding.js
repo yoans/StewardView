@@ -317,11 +317,11 @@ async function seedDefaultFinancialStructure(tenantId, userId) {
   await db('categories').insert(categories);
 
   await db('funds').insert([
-    { name: 'General Fund', description: 'Unrestricted general operating fund', current_balance: 0, is_restricted: false, tenant_id: tenantId },
-    { name: 'Missions Fund', description: 'Designated for missionary support', current_balance: 0, is_restricted: true, tenant_id: tenantId },
-    { name: 'Building Fund', description: 'Designated for building repairs and improvements', current_balance: 0, is_restricted: true, tenant_id: tenantId },
-    { name: 'Benevolence Fund', description: 'Designated for member/community assistance', current_balance: 0, is_restricted: true, tenant_id: tenantId },
-    { name: 'Youth Fund', description: 'Designated for youth activities and camp', current_balance: 0, is_restricted: true, tenant_id: tenantId },
+    { name: 'General Fund', description: 'Operating fund. Gifts land here.', current_balance: 0, is_restricted: false, tenant_id: tenantId },
+    { name: 'Missions Fund', description: 'Set aside for missionary support', current_balance: 0, is_restricted: false, tenant_id: tenantId },
+    { name: 'Building Fund', description: 'Set aside for building repairs and improvements', current_balance: 0, is_restricted: false, tenant_id: tenantId },
+    { name: 'Benevolence Fund', description: 'Set aside for member and community assistance', current_balance: 0, is_restricted: false, tenant_id: tenantId },
+    { name: 'Youth Fund', description: 'Set aside for youth activities', current_balance: 0, is_restricted: false, tenant_id: tenantId },
   ]);
 }
 
